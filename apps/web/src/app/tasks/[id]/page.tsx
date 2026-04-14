@@ -54,7 +54,7 @@ export default function TaskView() {
     if (!sessionId) return;
     const handle = subscribeSession(sessionId, (ev) => {
       setConnected(true);
-      setEvents((prev) => [...prev, ev]);
+      setEvents((prev) => (prev.some((e) => e.seq === ev.seq) ? prev : [...prev, ev]));
     });
     return () => handle.close();
   }, [sessionId]);

@@ -127,7 +127,7 @@ function SessionPane({ sessionId, onClose }: { sessionId: string; onClose: () =>
 
   useEffect(() => {
     const handle = subscribeSession(sessionId, (ev) => {
-      setEvents((prev) => [...prev, ev]);
+      setEvents((prev) => (prev.some((e) => e.seq === ev.seq) ? prev : [...prev, ev]));
       const init = ev.payload as { taskId?: string } | null;
       if (!taskId && init?.taskId) setTaskId(init.taskId);
     });
