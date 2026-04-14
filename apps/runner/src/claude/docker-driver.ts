@@ -130,30 +130,31 @@ async function startClaudeExec(
   container: Docker.Container,
   input: ClaudeExecInput,
 ): Promise<ClaudeExecHandle> {
+  // 注意: `--input-format=stream-json` を指定すると Claude は stdin から JSON メッセージを待つ。
+  // Phase 1 は初回プロンプトを `-p <prompt>` で渡し、追加メッセージは別 exec で流す方式に
+  // する (send() は互換のため残すが stdin 経由での追送信は本節では未使用)。
   const args = [
     '-p',
     input.prompt,
     '--output-format=stream-json',
-    '--input-format=stream-json',
     '--verbose',
-    '--include-partial-messages',
     `--max-turns=${input.maxTurns}`,
   ];
-  if (input.allowedTools.length > 0) args.push('--allowed-tools', input.allowedTools.join(','));
+  if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
   if (input.disallowedTools.length > 0)
-    args.push('--disallowed-tools', input.disallowedTools.join(','));
+    args.push('--disallowedTools', input.disallowedTools.join(' '));
   if (input.resumeSessionId) args.push('--resume', input.resumeSessionId);
 
   const exec = await container.exec({
     Cmd: ['claude', ...args],
-    AttachStdin: true,
+    AttachStdin: false,
     AttachStdout: true,
     AttachStderr: true,
     Tty: false,
     WorkingDir: '/workspace',
   });
 
-  const duplex = (await exec.start({ hijack: true, stdin: true })) as NodeJS.ReadWriteStream;
+  const duplex = (await exec.start({ hijack: true, stdin: false })) as NodeJS.ReadWriteStream;
 
   const stdout = new PassThrough();
   const stderr = new PassThrough();
