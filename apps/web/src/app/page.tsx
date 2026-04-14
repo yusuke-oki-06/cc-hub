@@ -56,20 +56,21 @@ export default function Home() {
           <h1 className="font-serif text-[48px] leading-[1.1] text-near">CC Hub</h1>
         </div>
         <nav className="flex items-center gap-1">
+          <Link href="/workspace">
+            <Button variant="ghost" size="sm">ワークスペース</Button>
+          </Link>
+          <Link href="/projects">
+            <Button variant="ghost" size="sm">プロジェクト</Button>
+          </Link>
+          <Link href="/skills">
+            <Button variant="ghost" size="sm">Skills</Button>
+          </Link>
           <Link href="/audit">
             <Button variant="ghost" size="sm">監査</Button>
           </Link>
           <Link href="/profiles">
             <Button variant="ghost" size="sm">Profile</Button>
           </Link>
-          <a
-            href="http://localhost:3100"
-            target="_blank"
-            rel="noreferrer"
-            className="hidden sm:inline-flex"
-          >
-            <Button variant="ghost" size="sm">Langfuse ↗</Button>
-          </a>
           <Link href="/tasks/new" className="ml-2">
             <Button variant="primary">+ 新規タスク</Button>
           </Link>

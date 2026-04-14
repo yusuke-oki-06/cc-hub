@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { createSandbox, type SandboxHandle } from '../claude/docker-driver.js';
 import type { ToolProfile } from '@cc-hub/shared';
 import { getMcpForProfile, buildMcpJson, collectMcpEnv } from './mcp.js';
+import { listInstalledSkills } from './skills.js';
 import { packEntriesToTar } from '../ingest/tar-packer.js';
 
 export interface ActiveSession {
@@ -122,10 +123,16 @@ export async function createSession(input: CreateSessionInput): Promise<ActiveSe
       ],
     },
   };
+  const installedSkills = await listInstalledSkills(input.userId, input.profile.id);
   const entries: Array<{ name: string; content: Buffer }> = [
     { name: '.mcp.json', content: Buffer.from(buildMcpJson(mcp)) },
     { name: '.claude/settings.local.json', content: Buffer.from(JSON.stringify(settings, null, 2)) },
   ];
+  for (const skill of installedSkills) {
+    // skill content is treated as SKILL.md (skill_md kind). tar-gz support is
+    // out of scope for Phase 1.5; future revision can unpack tar.gz contents.
+    entries.push({ name: `.claude/skills/${skill.slug}/SKILL.md`, content: skill.content });
+  }
   const tar = await packEntriesToTar(entries);
   await sandbox.cpToWorkspace(tar);
 

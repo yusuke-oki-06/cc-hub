@@ -29,6 +29,13 @@ import {
 } from './services/tasks.js';
 import { writeAudit, listAudit } from './services/audit.js';
 import {
+  listProjects,
+  createProject,
+  getProject,
+  listProjectTasks,
+  CreateProjectSchema,
+} from './services/projects.js';
+import {
   listMcpIntegrations,
   upsertMcpIntegration,
   setProfileMcp,
@@ -84,6 +91,28 @@ app.get('/api/me/budget', async (c) => {
   return c.json(await getBudgetState(c.get('userId')));
 });
 
+// ---------- Projects ----------
+app.get('/api/projects', async (c) => c.json({ projects: await listProjects(c.get('userId')) }));
+app.post('/api/projects', async (c) => {
+  const parsed = CreateProjectSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  const p = await createProject({
+    userId: c.get('userId'),
+    name: parsed.data.name,
+    description: parsed.data.description,
+  });
+  return c.json(p);
+});
+app.get('/api/projects/:id', async (c) => {
+  const p = await getProject(c.req.param('id'), c.get('userId'));
+  if (!p) return c.json({ error: 'not found' }, 404);
+  return c.json(p);
+});
+app.get('/api/projects/:id/tasks', async (c) => {
+  const tasks = await listProjectTasks(c.req.param('id'), c.get('userId'));
+  return c.json({ tasks });
+});
+
 // ---------- Tasks ----------
 app.get('/api/tasks', async (c) => c.json({ tasks: await listTasks(c.get('userId')) }));
 app.get('/api/tasks/:id', async (c) => {
@@ -99,6 +128,7 @@ app.get('/api/tasks/:id', async (c) => {
 const CreateSessionSchema = z.object({
   profileId: z.string().default('default'),
   prompt: z.string().min(1),
+  projectId: z.string().uuid().optional(),
 });
 app.post('/api/sessions', async (c) => {
   const userId = c.get('userId');
@@ -112,6 +142,7 @@ app.post('/api/sessions', async (c) => {
   const task = await createTask({
     userId,
     profileId: profile.id,
+    projectId: parsed.data.projectId,
     prompt: parsed.data.prompt,
   });
   const session = await createSession({ userId, taskId: task.id, profile });

@@ -16,10 +16,13 @@ export async function createTask(input: {
   profileId: string;
   prompt: string;
   repoPath?: string;
+  projectId?: string;
 }): Promise<TaskRow> {
+  const projectId = input.projectId ?? '00000000-0000-0000-0000-000000000100';
   const [row] = await sql<TaskRow[]>`
-    INSERT INTO tasks (user_id, profile_id, prompt, repo_path, status)
-    VALUES (${input.userId}::uuid, ${input.profileId}, ${input.prompt}, ${input.repoPath ?? '/workspace'}, 'queued')
+    INSERT INTO tasks (user_id, profile_id, prompt, repo_path, status, project_id)
+    VALUES (${input.userId}::uuid, ${input.profileId}, ${input.prompt},
+            ${input.repoPath ?? '/workspace'}, 'queued', ${projectId}::uuid)
     RETURNING
       id::text,
       user_id::text   AS "userId",
