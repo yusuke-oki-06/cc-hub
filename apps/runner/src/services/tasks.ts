@@ -79,6 +79,19 @@ export async function getTask(taskId: string, userId: string): Promise<TaskRow |
   return row ?? null;
 }
 
+export async function getLatestSessionForTask(
+  taskId: string,
+  userId: string,
+): Promise<string | null> {
+  const [row] = await sql<{ id: string }[]>`
+    SELECT s.id::text FROM sessions s
+    WHERE s.task_id = ${taskId}::uuid AND s.user_id = ${userId}::uuid
+    ORDER BY s.created_at DESC
+    LIMIT 1
+  `;
+  return row?.id ?? null;
+}
+
 export async function listTasks(userId: string, limit = 50): Promise<TaskRow[]> {
   return sql<TaskRow[]>`
     SELECT

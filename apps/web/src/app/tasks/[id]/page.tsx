@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,18 +14,31 @@ interface Task {
   profileId: string;
   costUsd: number;
   createdAt: string;
+  sessionId: string | null;
 }
 
 export default function TaskView({ params }: { params: { id: string } }) {
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get('sid');
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<SseEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const sessionId = task?.sessionId ?? null;
 
   useEffect(() => {
-    api<Task>(`/api/tasks/${params.id}`).then(setTask).catch(() => null);
+    // Codex 指摘: ?sid に依存せず task → session を API で解決
+    const loop = async () => {
+      while (true) {
+        try {
+          const t = await api<Task>(`/api/tasks/${params.id}`);
+          setTask(t);
+          if (t.sessionId) break;
+        } catch {
+          // ignore; retry
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    };
+    void loop();
   }, [params.id]);
 
   useEffect(() => {

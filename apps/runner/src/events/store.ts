@@ -18,25 +18,30 @@ export interface StoredEvent {
 }
 
 export async function appendEvent(input: AppendEventInput): Promise<StoredEvent> {
-  const rows = await sql<StoredEvent[]>`
-    WITH next AS (
-      SELECT COALESCE(MAX(seq), -1) + 1 AS seq
-      FROM events
-      WHERE session_id = ${input.sessionId}::uuid
-    )
-    INSERT INTO events (session_id, seq, event_type, payload, parent_tool_use_id)
-    SELECT ${input.sessionId}::uuid, next.seq, ${input.eventType}, ${sql.json(input.payload as never)}, ${input.parentToolUseId ?? null}
-    FROM next
-    RETURNING
-      session_id  AS "sessionId",
-      seq,
-      event_type  AS "eventType",
-      payload,
-      parent_tool_use_id AS "parentToolUseId",
-      created_at  AS "createdAt"
-  `;
-  if (!rows[0]) throw new Error('failed to append event');
-  return rows[0];
+  // セッション単位で advisory-xact-lock を取り、並行 publish でも seq が衝突しないことを保証する。
+  // `hashtextextended(session_id::text, 0)` で bigint key を生成、txn 終了で自動解放。
+  return await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${input.sessionId}::text, 0))`;
+    const rows = await tx<StoredEvent[]>`
+      WITH next AS (
+        SELECT COALESCE(MAX(seq), -1) + 1 AS seq
+        FROM events
+        WHERE session_id = ${input.sessionId}::uuid
+      )
+      INSERT INTO events (session_id, seq, event_type, payload, parent_tool_use_id)
+      SELECT ${input.sessionId}::uuid, next.seq, ${input.eventType}, ${tx.json(input.payload as never)}, ${input.parentToolUseId ?? null}
+      FROM next
+      RETURNING
+        session_id  AS "sessionId",
+        seq,
+        event_type  AS "eventType",
+        payload,
+        parent_tool_use_id AS "parentToolUseId",
+        created_at  AS "createdAt"
+    `;
+    if (!rows[0]) throw new Error('failed to append event');
+    return rows[0];
+  });
 }
 
 export async function readEventsAfter(

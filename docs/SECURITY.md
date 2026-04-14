@@ -97,6 +97,25 @@
 - 緩和: Runner プロセスは信頼境界、外部公開しない
 - 対処 (Phase 2): Runner 自体を権限分離 container に置いて socket proxy (docker-socket-proxy) を挟む
 
+### R11. HITL (Human-in-the-Loop) 承認は Phase 1 未配線 (低, 仕様)
+- WebUI `/tasks/:id` には承認キュー UI があるが、現状は profile の `allowedTools`
+  で事前認可したツールのみ Claude が使うモデル。ガードレール hook 違反は**確認なく deny**
+  する (`apps/runner/src/hooks/endpoints.ts`)
+- Claude の `permission_request` stream イベントは stream-parser → SSE に素通しで届くが、
+  runner 側で `permission_requests` テーブルに保存・WebUI モーダル連動までは未実装
+- 対処 (Phase 2 以降): `canUseTool` 相当のフロー (hook が `permissionDecision: ask` を返し、
+  runner が DB に request 記録 + SSE で WebUI に通知、ユーザー承認を runner が hook に返却)
+- 影響: Phase 1 では「プロファイルで固定、違反は即 deny」という挙動になるため、動的に
+  対象を広げる運用 (pcap 解析中に ad-hoc で新しいツールを許す等) はできない
+
+### R12. イベント seq race (修正済 / 要負荷試験)
+- Claude stream と guardrail hook から並行 publish で `UNIQUE(session_id,seq)` 衝突の
+  可能性があった (Codex 指摘)
+- 対処: `events/store.ts` で `pg_advisory_xact_lock(hashtextextended(session_id::text,0))`
+  を取得して serialize 化
+- 残: 高負荷時に advisory lock が hot になりうる → Phase 2 で sequence 化 (per-session sequence
+  or SERIAL column + session_id を compound PK に)
+
 ---
 
 ## 3. レッドチーム テストケース (M8 で実行予定)
