@@ -108,6 +108,45 @@
 - 影響: Phase 1 では「プロファイルで固定、違反は即 deny」という挙動になるため、動的に
   対象を広げる運用 (pcap 解析中に ad-hoc で新しいツールを許す等) はできない
 
+### Phase 1.5 で追加された残余リスク (R13〜R20)
+
+### R13. 継続会話の claude_session_id 上書き方針 (中)
+- 現状 `services/sessions.ts:setClaudeSessionId` は最初の値のみ保持 (`if (!session.claudeSessionId)`)
+- Claude CLI が `--resume` で別の session_id を発行した場合、古い ID で resume し続けて context が途切れる可能性
+- 対処 (Phase 2): 毎ターン system.init の session_id を追跡、最新を採用
+
+### R14. Skill tar.gz 未展開 (中)
+- `services/skills.ts` の `PublishSkillSchema` は `contentKind: tar_gz` を受け付けるが、`sessions.ts` の install 時展開は `SKILL.md` 前提でそのまま書き出す
+- tar.gz を publish されると中身がそのままバイナリとして SKILL.md に書かれ Claude が読めない (害はない)
+- 対処: `contentKind === 'skill_md'` のみ受け付ける、または `tar-stream extract` で /workspace/.claude/skills/<slug>/ 以下に展開
+
+### R15. Follow-up 409 判定の in-memory 依存 (低)
+- `/api/sessions/:id/claude/prompt` は `session.claudeExec` の存在のみで「前ターン実行中」を判定
+- docker exec が crash して onExit が発火しなかった場合、claudeExec 変数がクリアされず 409 から復帰できない
+- 対処: exec 開始時刻 + タイムアウト (profile.timeLimitSeconds) で stale 判定
+
+### R16. /admin/* 系 API の RBAC 不在 (Phase 1 仕様, Phase 2 必須)
+- `/api/admin/usage-summary`, `/api/admin/skills/:id/approve` などが role check なし
+- R7 と重複: Phase 1 は単一ユーザー前提、Phase 2 で users.role = admin 判定を middleware 化
+- 対処: middleware で `c.get('userId')` のユーザーが admin role か DB で引く
+
+### R17. Skill scanner の INJECTION_PATTERNS が限定的 (中)
+- 英日で各 2-3 個のみ、Unicode 混入や類義表現で bypass 可能
+- 対処 (Phase 2): LLM-based secondary screening (Claude に「この SKILL.md は安全か?」と問う) or 専用 classifier
+
+### R18. SaaS iframe 固定 + fallback なし (設計上の受容リスク)
+- `apps/web/src/app/tasks/[id]/page.tsx` の `SaasPanel` は `sandbox="allow-scripts allow-same-origin ..."` で iframe 埋込
+- Slack/Jira/Confluence は X-Frame-Options: SAMEORIGIN で空白になる可能性が高い
+- ユーザー判断により fallback なし (空白表示)。Phase 2 で proxy 経由の X-Frame-Options strip を検討
+
+### R19. skills.content BYTEA 保存の容量 (低)
+- 大型 skill (tar.gz with scripts) が DB 肥大化要因に
+- 対処 (Phase 2): MinIO に移行、BYTEA は hash のみ
+
+### R20. Session destroy 後の 404 follow-up (低)
+- budget.exceeded で destroySession した後に /prompt が来ると 404
+- ユーザーは「中断」表示を見てから別セッション作る運用で OK、UI で明示済み
+
 ### R12. イベント seq race (修正済 / 要負荷試験)
 - Claude stream と guardrail hook から並行 publish で `UNIQUE(session_id,seq)` 衝突の
   可能性があった (Codex 指摘)
