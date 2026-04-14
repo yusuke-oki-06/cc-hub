@@ -68,39 +68,33 @@ export default function Home() {
         body: JSON.stringify({ profileId, prompt, projectId }),
       });
 
-      // Navigate immediately so the user sees the stream coming alive.
-      // Uploads and claude/start run after the navigation; tasks/[id] will
-      // show "セッションを準備中…" then live events as they arrive.
-      router.push(`/tasks/${created.taskId}`);
-
-      (async () => {
-        try {
-          if (mode === 'upload' && files.length > 0) {
-            for (const f of files) {
-              const form = new FormData();
-              form.append('file', f);
-              const r = await fetch(`${runnerBase}/api/sessions/${created.sessionId}/upload`, {
-                method: 'POST',
-                body: form,
-                headers: { Authorization: getAuthHeader() },
-              });
-              if (!r.ok) throw new Error(`upload failed: ${f.name}`);
-            }
-          } else if (mode === 'git' && gitUrl) {
-            await api(`/api/sessions/${created.sessionId}/git-clone`, {
-              method: 'POST',
-              body: JSON.stringify({ url: gitUrl }),
-            });
-          }
-          await api(`/api/sessions/${created.sessionId}/claude/start`, {
+      // Run ingest + claude/start in the foreground before navigating.
+      // Fire-and-forget after router.push is unreliable: React tears down
+      // the component and pending fetches can silently drop, leaving the
+      // task stuck in "queued" with no claude exec ever spawning.
+      if (mode === 'upload' && files.length > 0) {
+        for (const f of files) {
+          const form = new FormData();
+          form.append('file', f);
+          const r = await fetch(`${runnerBase}/api/sessions/${created.sessionId}/upload`, {
             method: 'POST',
-            body: JSON.stringify({}),
+            body: form,
+            headers: { Authorization: getAuthHeader() },
           });
-        } catch (err) {
-          // If ingest / start fails, the tasks page will show the error via SSE.
-          console.error('[landing] post-navigate bootstrap failed:', err);
+          if (!r.ok) throw new Error(`upload failed: ${f.name}`);
         }
-      })();
+      } else if (mode === 'git' && gitUrl) {
+        await api(`/api/sessions/${created.sessionId}/git-clone`, {
+          method: 'POST',
+          body: JSON.stringify({ url: gitUrl }),
+        });
+      }
+      await api(`/api/sessions/${created.sessionId}/claude/start`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+
+      router.push(`/tasks/${created.taskId}`);
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);

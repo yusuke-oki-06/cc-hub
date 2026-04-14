@@ -8,8 +8,10 @@ import { z } from 'zod';
 export const ClaudeStreamEventSchema = z
   .object({
     type: z.string(),
-    session_id: z.string().optional(),
-    parent_tool_use_id: z.string().optional(),
+    session_id: z.string().nullish(),
+    // Claude CLI emits null (not just undefined) for partial/stream events,
+    // so accept both shapes instead of flagging as parse_error.
+    parent_tool_use_id: z.string().nullish(),
   })
   .passthrough();
 export type ClaudeStreamEvent = z.infer<typeof ClaudeStreamEventSchema>;

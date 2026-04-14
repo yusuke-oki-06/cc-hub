@@ -356,7 +356,7 @@ async function runTurn(
         sessionId: session.sessionId,
         eventType: mapClaudeEventType(event.type),
         payload: event,
-        parentToolUseId: event.parent_tool_use_id,
+        parentToolUseId: event.parent_tool_use_id ?? undefined,
       });
       if (event.type === 'result' || event.type === 'message') {
         const usage = extractUsage(event);
