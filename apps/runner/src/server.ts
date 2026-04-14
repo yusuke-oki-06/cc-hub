@@ -413,6 +413,30 @@ async function runTurn(
   });
 }
 
+async function failSession(
+  session: ActiveSession,
+  scope: 'start' | 'prompt',
+  err: unknown,
+): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`[runner] ${scope} failed:`, err);
+  try {
+    await publishEvent({
+      sessionId: session.sessionId,
+      eventType: 'error',
+      payload: { scope, message },
+    });
+  } catch (e) {
+    console.error('[runner] failSession publish failed:', e);
+  }
+  try {
+    await setTaskStatus(session.taskId, 'failed');
+  } catch (e) {
+    console.error('[runner] failSession setTaskStatus failed:', e);
+  }
+  session.claudeExec = undefined;
+}
+
 app.post('/api/sessions/:id/claude/start', async (c) => {
   const sessionId = c.req.param('id');
   const session = getActiveSession(sessionId);
@@ -427,16 +451,21 @@ app.post('/api/sessions/:id/claude/start', async (c) => {
     task?.prompt ??
     'Inspect the /workspace directory and describe what you find.';
 
-  await runTurn(session, {
-    prompt,
-    isFirstTurn: true,
-    overrides: {
-      model: parsed.data.model,
-      permissionMode: parsed.data.permissionMode,
-      allowedTools: parsed.data.allowedTools,
-    },
-  });
-  return c.json({ ok: true });
+  try {
+    await runTurn(session, {
+      prompt,
+      isFirstTurn: true,
+      overrides: {
+        model: parsed.data.model,
+        permissionMode: parsed.data.permissionMode,
+        allowedTools: parsed.data.allowedTools,
+      },
+    });
+    return c.json({ ok: true });
+  } catch (err) {
+    await failSession(session, 'start', err);
+    return c.json({ error: (err as Error).message ?? 'start failed' }, 500);
+  }
 });
 
 app.post('/api/sessions/:id/claude/prompt', async (c) => {
@@ -465,16 +494,21 @@ app.post('/api/sessions/:id/claude/prompt', async (c) => {
     },
   });
 
-  await runTurn(session, {
-    prompt: parsed.data.text,
-    isFirstTurn: false,
-    overrides: {
-      model: parsed.data.model,
-      permissionMode: parsed.data.permissionMode,
-      allowedTools: parsed.data.allowedTools,
-    },
-  });
-  return c.json({ ok: true });
+  try {
+    await runTurn(session, {
+      prompt: parsed.data.text,
+      isFirstTurn: false,
+      overrides: {
+        model: parsed.data.model,
+        permissionMode: parsed.data.permissionMode,
+        allowedTools: parsed.data.allowedTools,
+      },
+    });
+    return c.json({ ok: true });
+  } catch (err) {
+    await failSession(session, 'prompt', err);
+    return c.json({ error: (err as Error).message ?? 'prompt failed' }, 500);
+  }
 });
 
 // ---------- Permission resolution (HITL approval) ----------
