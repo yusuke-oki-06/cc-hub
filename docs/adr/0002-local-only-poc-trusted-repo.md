@@ -1,44 +1,51 @@
-# ADR 0002: Phase 1 は localhost + trusted repo 限定
+# ADR 0002: Phase 1 も container-sandboxed, zero-trust workspace で実行
 
-- **Date**: 2026-04-14
+- **Date**: 2026-04-15 (改訂、旧版「host-native / trusted repo only」を置換)
 - **Status**: Accepted
 - **Phase**: 1
 
 ## Context
 
-Phase 1 の Runner は Windows ホスト上で `child_process` + `git worktree` でセッションを分離する設計。
-しかしこれは「隔離」ではなく「作業ディレクトリ分離」に過ぎず、許可された Read/Bash/Write の組み合わせで:
+当初 Phase 1 は「ホストで child_process + git worktree、trusted repo のみ」と設計していたが、以下の制約が判明:
 
-- ホスト側の資格情報 (`~/.ssh`, `~/.aws`, `.claude/.credentials.json`)
-- Git 設定 (`core.hooksPath`, `includeIf`, `.gitattributes` filter)
-- 親プロセス環境変数
-- junction/symlink 経由の外部パス参照
-- PowerShell/cmd 迂回
-
-などでガードレールを回避できる可能性がある。
+1. 社内端末はローカルファイルが暗号化されるため、ホスト上に作業ファイルを置けない
+2. 利用者は非エンジニアも多く、ローカルリポジトリを git clone して用意できない
+3. Codex 指摘: host-native runner は「隔離」ではなく「作業ディレクトリ分離」に過ぎない
 
 ## Decision
 
-**Phase 1 では以下を前提とする**:
+**Phase 1 から session = Docker container** で隔離する。ホスト上には作業ファイルを残さない。
 
-1. **Trusted repo only** — 自分のリポジトリ (自分が書いた/レビューした) のみを対象。untrusted OSS の解析等は対象外
-2. **Localhost only** — 外部ネットワーク公開しない (Cloudflare Tunnel 等も使わない)
-3. **Single user** — 本人のみ利用 (DB schema は multi-user でも、運用は単一)
-
-untrusted コードを扱いたい / 他人に使わせたい場合は **Phase 2 で disposable container/VM 隔離に移行**する。
-これを計画時点で明記することで、Phase 1 のガードレール実装をシンプルに保つ。
+- セッション作成時に新規コンテナを起動、終了時に破棄
+- ユーザーの `~/.claude/.credentials.json` を container に read-only bind mount (サブスクリプション利用)
+- repo の持ち込みは (a) WebUI からの zip/tar アップロード + (b) Git URL 入力の 2 系統
+- workspace は container 内 `/workspace` のみ。host からは直接見えない
+- Claude Code CLI は container 内で `claude -p --output-format=stream-json ...` として起動
+- Runner は stdout/stderr を dockerode 経由で stream 受信
 
 ## Consequences
 
 ### Positive
-- Phase 1 のガードレールは「悪意ある入力」への耐性より「自分のミス防止」「コスト暴走防止」「監査ログ」にフォーカスでき、スコープが明確
-- 実装コストが下がる (sandbox や namespace 分離が不要)
+- Linux kernel namespaces/cgroups による実効的な隔離 → untrusted repo も受け入れ可能
+- ホスト端末の暗号化ポリシーに抵触しない (作業ファイルは container の tmpfs ボリューム)
+- 社員非エンジニアが WebUI でドラッグ&ドロップするだけで使える UX
+- Phase 2 の社内展開時もコンテナ設計を流用できる (スケジューラを K8s に替えるだけ)
 
 ### Negative
-- Phase 2 で container/VM 化する際、WorkspaceProvider 抽象を通じて実装差し替えが必要 (ADR 0003 参照)
-- 本 PoC の結果だけでは「社内配布しても安全か」の最終判断はできない → Phase 2 の移行 ADR で再評価
+- Docker Desktop (Phase 1 は WSL2 backend) 必須 → 社内配布で Docker セットアップが追加タスクに
+- コンテナ起動のコールドスタート (2〜5 秒)。UX 改善のため warm pool 化は将来課題
+- Windows → Linux container の credentials mount 経路は Docker Desktop に依存
+- Runner 実装が child_process → dockerode になり、若干複雑化
+
+## 実装変更点
+
+- `packages/guardrails/src/workspace-provider.ts` に `DockerWorkspaceProvider` を追加
+- `apps/runner/src/claude/driver.ts` を dockerode ベースに置き換え
+- `infra/sandbox/Dockerfile` を新規追加 (node:20-bookworm + `@anthropic-ai/claude-code` + git)
+- `apps/runner/src/ingest/zip.ts` / `git.ts` を追加 (アップロード・クローン)
+- ADR 0005 (repo ingestion), ADR 0006 (PoC egress policy) を別途
 
 ## References
 
-- Codex レビュー指摘 (2026-04-14): "host-native runner は隔離ではなく作業ディレクトリ分離に過ぎない"
-- ADR 0003 (WorkspaceProvider 抽象)
+- Codex レビュー (2026-04-14)
+- 社内端末暗号化ポリシーの制約 (ユーザー要件 2026-04-15)
