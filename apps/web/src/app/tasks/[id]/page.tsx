@@ -193,9 +193,10 @@ export default function TaskView() {
                 : timeline.map((it) => (
                     <FriendlyRow key={it.seq} item={it} sessionId={sessionId} />
                   ))}
-              {timeline.length === 0 && !devMode && (
+              {!devMode && <ThinkingIndicator timeline={timeline} isRunning={isRunning} />}
+              {timeline.length === 0 && !devMode && !isRunning && !sessionId && (
                 <div className="py-10 text-center font-sans text-[13px] text-stone">
-                  Claude が応答を準備中です…
+                  セッションを準備中…
                 </div>
               )}
             </div>
@@ -287,6 +288,29 @@ export default function TaskView() {
   );
 }
 
+function ThinkingIndicator({
+  timeline,
+  isRunning,
+}: {
+  timeline: FriendlyItem[];
+  isRunning: boolean;
+}) {
+  if (!isRunning) return null;
+  const last = timeline[timeline.length - 1];
+  if (last?.kind === 'result.success' || last?.kind === 'result.failure') return null;
+  if (last?.kind === 'tool.running') return null;
+  return (
+    <div className="flex items-center gap-2 rounded-card border border-border-cream bg-ivory px-4 py-3">
+      <span className="inline-flex gap-[3px]">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.3s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.15s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta" />
+      </span>
+      <span className="font-sans text-[13px] text-olive">Claude が考えています…</span>
+    </div>
+  );
+}
+
 function ShortcutButton({
   label,
   title,
@@ -332,6 +356,7 @@ function FriendlyRow({
     guardrail: 'bg-[#faf3dd] border-[#e3d196]',
     budget: 'bg-[#faf3dd] border-[#e3d196]',
     saas_link: 'bg-[#f1ece2] border-ring-warm',
+    progress: 'bg-parchment border-border-cream text-olive italic',
     hidden: '',
   };
   return (

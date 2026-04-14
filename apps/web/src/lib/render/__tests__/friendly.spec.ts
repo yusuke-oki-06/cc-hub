@@ -101,15 +101,45 @@ describe('toFriendly', () => {
     expect(r.kind).toBe('budget');
   });
 
-  it('system.init hub is hidden', () => {
+  it('system.init hub (session setup) becomes progress', () => {
     const r = toFriendly(ev(14, 'system.init', { taskId: 't', profileId: 'p' }));
-    expect(r.kind).toBe('hidden');
+    expect(r.kind).toBe('progress');
+    expect(r.title).toContain('準備中');
   });
 
-  it('system.init from claude shows model', () => {
-    const r = toFriendly(ev(15, 'system.init', { model: 'claude-opus-4-6' }));
-    expect(r.kind).toBe('assistant');
+  it('system.init from claude shows model + MCP', () => {
+    const r = toFriendly(
+      ev(15, 'system.init', {
+        model: 'claude-opus-4-6',
+        mcp_servers: [
+          { name: 'Slack', status: 'connected' },
+          { name: 'Jira', status: 'connected' },
+          { name: 'Failed', status: 'failed' },
+        ],
+      }),
+    );
+    expect(r.kind).toBe('progress');
     expect(r.title).toContain('claude-opus-4-6');
+    expect(r.title).toContain('MCP 2 件接続');
+  });
+
+  it('turn.started surfaces the user message', () => {
+    const r = toFriendly(
+      ev(20, 'turn.started', { role: 'user', text: 'hello claude', model: 'opus' }),
+    );
+    expect(r.kind).toBe('user');
+    expect(r.body).toBe('hello claude');
+    expect(r.meta).toContain('model: opus');
+  });
+
+  it('rate_limit_event allowed is hidden (noise)', () => {
+    const r = toFriendly(
+      ev(21, 'assistant.message', {
+        type: 'rate_limit_event',
+        rate_limit_info: { status: 'allowed' },
+      }),
+    );
+    expect(r.kind).toBe('hidden');
   });
 
   it('error raw parse_error is hidden', () => {
@@ -147,15 +177,16 @@ describe('buildTimeline', () => {
     expect(items[0]?.kind).toBe('tool.finished');
   });
 
-  it('filters out hidden events', () => {
+  it('filters out hidden events (parse_error) but keeps progress', () => {
     const items = buildTimeline([
-      ev(1, 'system.init', { taskId: 't' }),
-      ev(2, 'assistant.message', {
+      ev(1, 'error', { raw: '{"type":...' }), // hidden
+      ev(2, 'system.init', { taskId: 't' }),  // progress
+      ev(3, 'assistant.message', {
         message: { content: [{ type: 'text', text: 'hi' }] },
       }),
     ]);
-    expect(items).toHaveLength(1);
-    expect(items[0]?.kind).toBe('assistant');
+    expect(items).toHaveLength(2);
+    expect(items.map((i) => i.kind)).toEqual(['progress', 'assistant']);
   });
 
   it('preserves assistant, tool.finished, result ordering', () => {
