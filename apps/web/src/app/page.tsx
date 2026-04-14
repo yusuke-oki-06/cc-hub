@@ -49,110 +49,88 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-5xl p-8 space-y-6">
-      <header className="flex items-center justify-between">
+    <div className="mx-auto max-w-[1200px] px-8 py-12 space-y-10">
+      {/* Masthead */}
+      <header className="flex items-start justify-between border-b border-border-warm pb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">CC Hub</h1>
-          <p className="text-xs text-slate-400">社内 AI 業務アシスタント基盤 (Phase 1 PoC)</p>
+          <h1 className="font-serif text-[48px] leading-[1.1] text-near">CC Hub</h1>
+          <p className="mt-2 font-sans text-[15px] text-olive">
+            社内 AI 業務アシスタント基盤 — Phase 1 PoC
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/tasks/new">
-            <Button>+ 新規タスク</Button>
-          </Link>
+        <nav className="flex items-center gap-1">
           <Link href="/audit">
-            <Button variant="ghost">監査</Button>
+            <Button variant="ghost" size="sm">監査</Button>
           </Link>
           <Link href="/profiles">
-            <Button variant="ghost">Profile</Button>
+            <Button variant="ghost" size="sm">Profile</Button>
           </Link>
-        </div>
+          <a
+            href="http://localhost:3100"
+            target="_blank"
+            rel="noreferrer"
+            className="hidden sm:inline-flex"
+          >
+            <Button variant="ghost" size="sm">Langfuse ↗</Button>
+          </a>
+          <Link href="/tasks/new" className="ml-2">
+            <Button variant="primary">+ 新規タスク</Button>
+          </Link>
+        </nav>
       </header>
 
       <TokenSetup />
 
       {error && (
-        <Card className="border-red-900/60 bg-red-900/10">
-          <div className="text-sm text-red-300">API エラー: {error}</div>
+        <Card className="border-[#e0a9a9] bg-[#f8e5e5]">
+          <div className="text-sm text-error-crimson">API エラー: {error}</div>
         </Card>
       )}
 
-      <section className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>日次利用</CardTitle>
-          </CardHeader>
-          {budget ? (
-            <div className="space-y-2">
-              <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-semibold">
-                  ${budget.dailyUsedUsd.toFixed(3)}
-                </span>
-                <span className="text-xs text-slate-400">cap ${budget.dailyCapUsd.toFixed(2)}</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full bg-brand-500"
-                  style={{
-                    width: `${Math.min(100, (budget.dailyUsedUsd / budget.dailyCapUsd) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs text-slate-500">loading</div>
-          )}
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>月次利用</CardTitle>
-          </CardHeader>
-          {budget ? (
-            <div className="space-y-2">
-              <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-semibold">
-                  ${budget.monthlyUsedUsd.toFixed(2)}
-                </span>
-                <span className="text-xs text-slate-400">
-                  cap ${budget.monthlyCapUsd.toFixed(2)}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500"
-                  style={{
-                    width: `${Math.min(100, (budget.monthlyUsedUsd / budget.monthlyCapUsd) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs text-slate-500">loading</div>
-          )}
-        </Card>
+      {/* Budget cards */}
+      <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <BudgetCard
+          label="日次利用"
+          used={budget?.dailyUsedUsd}
+          cap={budget?.dailyCapUsd}
+          accent="bg-terracotta"
+        />
+        <BudgetCard
+          label="月次利用"
+          used={budget?.monthlyUsedUsd}
+          cap={budget?.monthlyCapUsd}
+          accent="bg-[#4b6a2a]"
+        />
       </section>
 
-      <section>
-        <h2 className="mb-3 text-sm font-semibold text-slate-300">最近のタスク</h2>
-        <div className="space-y-2">
+      {/* Recent tasks */}
+      <section className="space-y-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-serif text-subhead-sm text-near">最近のタスク</h2>
+          <span className="font-sans text-[13px] text-stone">{tasks.length} 件</span>
+        </div>
+        <div className="space-y-3">
           {tasks.map((t) => (
-            <Link key={t.id} href={`/tasks/${t.id}`}>
-              <Card className="hover:border-brand-500/50 transition cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
+            <Link key={t.id} href={`/tasks/${t.id}`} className="block">
+              <Card className="hover:shadow-ring transition cursor-pointer">
+                <div className="flex items-start justify-between gap-6">
+                  <div className="min-w-0 space-y-2">
                     <div className="flex items-center gap-2">
                       <Badge tone={statusTone(t.status)}>{t.status}</Badge>
-                      <span className="text-xs text-slate-500 font-mono">
+                      <span className="font-mono text-[12px] text-stone">
                         {t.id.slice(0, 8)}
                       </span>
-                      <span className="text-xs text-slate-500">{t.profileId}</span>
+                      <span className="font-sans text-[12px] text-stone">· {t.profileId}</span>
                     </div>
-                    <div className="line-clamp-1 text-sm text-slate-100">{t.prompt}</div>
-                    <div className="text-[11px] text-slate-500">
+                    <div className="font-serif text-[20px] leading-[1.3] text-near line-clamp-2">
+                      {t.prompt}
+                    </div>
+                    <div className="font-sans text-[12px] text-stone">
                       {new Date(t.createdAt).toLocaleString('ja-JP')}
                     </div>
                   </div>
-                  <div className="text-right text-xs">
-                    <div className="text-slate-200">${t.costUsd.toFixed(3)}</div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-serif text-feature text-near">${t.costUsd.toFixed(3)}</div>
                   </div>
                 </div>
               </Card>
@@ -160,14 +138,55 @@ export default function Home() {
           ))}
           {tasks.length === 0 && (
             <Card>
-              <div className="text-center text-sm text-slate-500">
-                タスクはまだありません。「+ 新規タスク」から作成してください。
+              <div className="py-6 text-center font-sans text-sm text-olive">
+                タスクはまだありません。「+ 新規タスク」から始めてください。
               </div>
             </Card>
           )}
         </div>
       </section>
     </div>
+  );
+}
+
+function BudgetCard({
+  label,
+  used,
+  cap,
+  accent,
+}: {
+  label: string;
+  used?: number;
+  cap?: number;
+  accent: string;
+}) {
+  const ratio = used !== undefined && cap ? Math.min(100, (used / cap) * 100) : 0;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{label}</CardTitle>
+        {used !== undefined && cap !== undefined && (
+          <span className="font-sans text-[12px] text-stone">
+            cap ${cap.toFixed(2)}
+          </span>
+        )}
+      </CardHeader>
+      {used !== undefined && cap !== undefined ? (
+        <div className="space-y-3">
+          <div className="font-serif text-[40px] leading-[1.1] text-near">
+            ${used.toFixed(3)}
+          </div>
+          <div className="h-[6px] overflow-hidden rounded-full bg-border-warm">
+            <div
+              className={`h-full rounded-full ${accent}`}
+              style={{ width: `${ratio}%` }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="text-xs text-stone">loading</div>
+      )}
+    </Card>
   );
 }
 

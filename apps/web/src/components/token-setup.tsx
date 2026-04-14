@@ -19,7 +19,7 @@ export function TokenSetup() {
     return (
       <div className="flex justify-end">
         <button
-          className="text-xs text-slate-500 underline decoration-dotted hover:text-slate-300"
+          className="font-sans text-[12px] text-stone underline decoration-dotted hover:text-olive"
           onClick={() => setOpen(true)}
         >
           API token を変更
@@ -29,15 +29,16 @@ export function TokenSetup() {
   }
 
   return (
-    <Card className="border-amber-700/50 bg-amber-900/10">
-      <div className="space-y-2">
-        <div className="text-xs text-amber-300">
-          Phase 1: 開発用の固定 Bearer トークンを入力してください (.env.local の
-          RUNNER_API_TOKEN と一致させる)
+    <Card className="border-[#e3d196] bg-[#faf3dd]">
+      <div className="space-y-3">
+        <div className="font-sans text-[13px] text-[#7a5a12]">
+          Phase 1: 開発用の固定 Bearer トークンを入力してください。
+          <span className="font-mono text-[11px]">.env.local</span> の{' '}
+          <span className="font-mono text-[11px]">RUNNER_API_TOKEN</span> と一致が必要。
         </div>
         <div className="flex gap-2">
           <input
-            className="flex-1 rounded-md bg-slate-900 border border-slate-800 px-3 py-2 text-sm font-mono"
+            className="flex-1 rounded-card border border-border-warm bg-white px-3 py-2 font-mono text-[13px] text-near placeholder:text-stone"
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="dev-token-..."

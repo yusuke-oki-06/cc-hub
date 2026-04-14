@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,7 +26,6 @@ export default function TaskView({ params }: { params: { id: string } }) {
   const sessionId = task?.sessionId ?? null;
 
   useEffect(() => {
-    // Codex 指摘: ?sid に依存せず task → session を API で解決
     const loop = async () => {
       while (true) {
         try {
@@ -33,7 +33,7 @@ export default function TaskView({ params }: { params: { id: string } }) {
           setTask(t);
           if (t.sessionId) break;
         } catch {
-          // ignore; retry
+          // ignore
         }
         await new Promise((r) => setTimeout(r, 1500));
       }
@@ -75,73 +75,117 @@ export default function TaskView({ params }: { params: { id: string } }) {
   };
 
   return (
-    <div className="mx-auto max-w-5xl p-6 space-y-4">
-      <header className="flex items-center justify-between">
-        <div>
+    <div className="mx-auto max-w-[1200px] px-8 py-10 space-y-6">
+      <Link href="/" className="font-sans text-[13px] text-stone hover:text-olive">
+        ← ダッシュボード
+      </Link>
+      <header className="flex items-start justify-between gap-6 border-b border-border-warm pb-5">
+        <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">{task?.prompt ?? '…'}</h1>
-            {task && <Badge>{task.status}</Badge>}
+            {task && <Badge tone={statusTone(task.status)}>{task.status}</Badge>}
+            <span className="font-mono text-[12px] text-stone">
+              task {params.id.slice(0, 8)}
+            </span>
+            <span className="font-mono text-[12px] text-stone">
+              · session {sessionId?.slice(0, 8) ?? '…'}
+            </span>
+            <span className="font-sans text-[12px] text-stone">
+              · {connected ? 'SSE 接続中' : '接続待ち'}
+            </span>
           </div>
-          <div className="text-xs text-slate-500 font-mono mt-1">
-            task {params.id.slice(0, 8)} · session {sessionId?.slice(0, 8) ?? '—'} ·{' '}
-            {connected ? 'SSE 接続中' : '接続待ち'}
-          </div>
+          <h1 className="font-serif text-[28px] leading-[1.2] text-near line-clamp-2">
+            {task?.prompt ?? '…'}
+          </h1>
         </div>
-        <div className="flex gap-2">
-          <Button variant="danger" onClick={onAbort}>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="sand" size="sm">共有</Button>
+          <Button
+            variant="dark"
+            size="sm"
+            onClick={onAbort}
+            disabled={!sessionId}
+          >
             中断
           </Button>
         </div>
       </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>ストリーム</CardTitle>
-          <div className="text-xs text-slate-500">{events.length} events</div>
-        </CardHeader>
-        <div ref={listRef} className="max-h-[60vh] overflow-y-auto space-y-2 pr-2">
-          {events.map((ev) => (
-            <EventRow key={ev.seq} ev={ev} />
-          ))}
-          {events.length === 0 && (
-            <div className="text-xs text-slate-500">
-              イベント待ち… Claude が起動するまで数秒かかります
-            </div>
-          )}
-        </div>
-      </Card>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>ストリーム</CardTitle>
+            <span className="font-sans text-[12px] text-stone">{events.length} events</span>
+          </CardHeader>
+          <div ref={listRef} className="max-h-[64vh] overflow-y-auto space-y-3 pr-2">
+            {events.map((ev) => (
+              <EventRow key={ev.seq} ev={ev} />
+            ))}
+            {events.length === 0 && (
+              <div className="py-12 text-center font-sans text-[13px] text-stone">
+                イベント待ち… Claude が起動するまで数秒かかります
+              </div>
+            )}
+          </div>
+        </Card>
 
-      {permissionOpen.length > 0 && <PermissionQueue events={permissionOpen} sessionId={sessionId} />}
+        <aside className="space-y-4">
+          {permissionOpen.length > 0 && (
+            <PermissionQueue events={permissionOpen} sessionId={sessionId} />
+          )}
+          <Card>
+            <CardHeader>
+              <CardTitle>メタ情報</CardTitle>
+            </CardHeader>
+            <dl className="space-y-2 font-sans text-[13px]">
+              <div className="flex justify-between">
+                <dt className="text-stone">profile</dt>
+                <dd className="font-mono text-near">{task?.profileId ?? '—'}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-stone">cost</dt>
+                <dd className="text-near">${task?.costUsd.toFixed(3) ?? '0.000'}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-stone">created</dt>
+                <dd className="text-near">
+                  {task ? new Date(task.createdAt).toLocaleString('ja-JP') : '—'}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+        </aside>
+      </div>
     </div>
   );
 }
 
 function EventRow({ ev }: { ev: SseEvent }) {
-  const tone = toneFor(ev.type);
   const summary = summarize(ev);
+  const border =
+    ev.type.startsWith('error')
+      ? 'border-[#e0a9a9] bg-[#fbeaea]'
+      : ev.type === 'result'
+        ? 'border-[#c9d9ab] bg-[#f2f6e8]'
+        : ev.type === 'guardrail.blocked' || ev.type === 'budget.exceeded'
+          ? 'border-[#e3d196] bg-[#faf3dd]'
+          : ev.type === 'permission_request'
+            ? 'border-[#e4b89a] bg-[#f9e8dc]'
+            : 'border-border-cream bg-white';
   return (
-    <div
-      className={
-        'rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs font-mono ' + tone
-      }
-    >
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+    <div className={`rounded-card border px-4 py-3 ${border}`}>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="font-sans text-[10px] uppercase tracking-[0.5px] text-stone">
           seq {ev.seq} · {ev.type}
         </span>
-        <span className="text-[10px] text-slate-600">{ev.createdAt?.slice(11, 19)}</span>
+        <span className="font-mono text-[10px] text-stone">
+          {ev.createdAt?.slice(11, 19)}
+        </span>
       </div>
-      <pre className="whitespace-pre-wrap break-words text-slate-100">{summary}</pre>
+      <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.6] text-near">
+        {summary}
+      </pre>
     </div>
   );
-}
-
-function toneFor(t: string): string {
-  if (t.startsWith('error')) return 'border-red-900/70';
-  if (t === 'result') return 'border-emerald-800/70';
-  if (t === 'guardrail.blocked' || t === 'budget.exceeded') return 'border-amber-800/70';
-  if (t === 'permission_request') return 'border-brand-700/70';
-  return '';
 }
 
 function summarize(ev: SseEvent): string {
@@ -174,25 +218,25 @@ function PermissionQueue({
   sessionId: string | null;
 }) {
   return (
-    <Card className="border-brand-500/50 bg-brand-500/5">
+    <Card className="border-[#e4b89a] bg-[#f9e8dc]">
       <CardHeader>
         <CardTitle>承認待ち ({events.length})</CardTitle>
       </CardHeader>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {events.map((ev) => {
           const p = ev.payload as { requestId?: string; toolName?: string; input?: unknown };
           return (
-            <div key={ev.seq} className="rounded border border-slate-700 bg-slate-900 p-3">
-              <div className="text-xs text-slate-300">
+            <div key={ev.seq} className="rounded-card border border-border-warm bg-white p-3">
+              <div className="font-sans text-[13px] text-near">
                 <b>{p.toolName ?? 'Tool'}</b> の実行許可
               </div>
-              <pre className="mt-1 text-[11px] text-slate-400 whitespace-pre-wrap">
-                {JSON.stringify(p.input ?? {}, null, 2).slice(0, 800)}
+              <pre className="mt-1 font-mono text-[11px] text-olive whitespace-pre-wrap">
+                {JSON.stringify(p.input ?? {}, null, 2).slice(0, 600)}
               </pre>
               <div className="mt-2 flex justify-end gap-2">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => {
                     if (!sessionId || !p.requestId) return;
                     void api(`/api/sessions/${sessionId}/permission`, {
@@ -205,6 +249,7 @@ function PermissionQueue({
                 </Button>
                 <Button
                   size="sm"
+                  variant="sand"
                   onClick={() => {
                     if (!sessionId || !p.requestId) return;
                     void api(`/api/sessions/${sessionId}/permission`, {
@@ -217,6 +262,7 @@ function PermissionQueue({
                 </Button>
                 <Button
                   size="sm"
+                  variant="primary"
                   onClick={() => {
                     if (!sessionId || !p.requestId) return;
                     void api(`/api/sessions/${sessionId}/permission`, {
@@ -234,4 +280,11 @@ function PermissionQueue({
       </div>
     </Card>
   );
+}
+
+function statusTone(s: string): 'default' | 'success' | 'warn' | 'danger' {
+  if (s === 'succeeded') return 'success';
+  if (s === 'running' || s === 'queued') return 'warn';
+  if (s === 'failed' || s === 'aborted') return 'danger';
+  return 'default';
 }

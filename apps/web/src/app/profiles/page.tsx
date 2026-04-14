@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -10,7 +11,8 @@ export default function ProfilesPage() {
   const [editing, setEditing] = useState<string>('');
   const [draft, setDraft] = useState('');
 
-  const load = () => api<{ profiles: ToolProfile[] }>('/api/profiles').then((r) => setProfiles(r.profiles));
+  const load = () =>
+    api<{ profiles: ToolProfile[] }>('/api/profiles').then((r) => setProfiles(r.profiles));
 
   useEffect(() => {
     void load();
@@ -28,21 +30,24 @@ export default function ProfilesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl p-6 space-y-4">
-      <h1 className="text-lg font-semibold">Profile</h1>
+    <div className="mx-auto max-w-[900px] px-8 py-12 space-y-6">
+      <Link href="/" className="font-sans text-[13px] text-stone hover:text-olive">
+        ← ダッシュボード
+      </Link>
+      <h1 className="font-serif text-[40px] leading-[1.1] text-near">Profile</h1>
       {profiles.map((p) => (
         <Card key={p.id}>
           <CardHeader>
             <CardTitle>{p.name}</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => startEdit(p)}>
+            <Button variant="sand" size="sm" onClick={() => startEdit(p)}>
               編集 (JSON)
             </Button>
           </CardHeader>
           {editing === p.id ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <textarea
-                rows={20}
-                className="w-full font-mono text-xs rounded bg-slate-900 border border-slate-800 p-2"
+                rows={22}
+                className="w-full rounded-card border border-border-warm bg-white p-3 font-mono text-[12px] text-near"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
               />
@@ -54,7 +59,7 @@ export default function ProfilesPage() {
               </div>
             </div>
           ) : (
-            <pre className="text-xs text-slate-400 whitespace-pre-wrap">
+            <pre className="font-mono text-[12px] text-olive whitespace-pre-wrap">
               {JSON.stringify(p, null, 2)}
             </pre>
           )}

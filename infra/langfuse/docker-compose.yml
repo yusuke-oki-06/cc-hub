@@ -65,10 +65,10 @@ services:
         condition: service_started
     environment: &lf_env
       DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
-      SALT: change-me-cc-hub-salt
-      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      SALT: ${LANGFUSE_SALT:-0c5d6ec6856d6d151ae0466917d5077b}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-488cb0f86d01d1807c605578fd61b61168fef5644f3e2666f96a136c5719b40e}
       TELEMETRY_ENABLED: 'false'
-      NEXTAUTH_SECRET: change-me-cc-hub-nextauth
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-eab0bcca5ef223e3830be3afa96e877f6b244e1b36ad265817368d14c6890528}
       NEXTAUTH_URL: http://localhost:3100
       LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
       LANGFUSE_S3_EVENT_UPLOAD_REGION: auto

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
@@ -37,10 +38,11 @@ export default function NewTask() {
         for (const file of files) {
           const form = new FormData();
           form.append('file', file);
-          const res = await fetch(
-            `${runnerBase}/api/sessions/${created.sessionId}/upload`,
-            { method: 'POST', body: form, headers: { Authorization: getAuthHeader() } },
-          );
+          const res = await fetch(`${runnerBase}/api/sessions/${created.sessionId}/upload`, {
+            method: 'POST',
+            body: form,
+            headers: { Authorization: getAuthHeader() },
+          });
           if (!res.ok) throw new Error(`upload failed: ${file.name}`);
         }
       } else if (mode === 'git' && gitUrl) {
@@ -55,7 +57,7 @@ export default function NewTask() {
         body: JSON.stringify({}),
       });
 
-      router.push(`/tasks/${created.taskId}?sid=${created.sessionId}`);
+      router.push(`/tasks/${created.taskId}`);
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);
@@ -63,10 +65,13 @@ export default function NewTask() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl p-8 space-y-6">
-      <header>
-        <h1 className="text-xl font-semibold">新規タスク</h1>
-        <p className="text-xs text-slate-400 mt-1">
+    <div className="mx-auto max-w-[820px] px-8 py-12 space-y-8">
+      <header className="border-b border-border-warm pb-6">
+        <Link href="/" className="font-sans text-[13px] text-stone hover:text-olive">
+          ← ダッシュボード
+        </Link>
+        <h1 className="mt-3 font-serif text-[40px] leading-[1.1] text-near">新規タスク</h1>
+        <p className="mt-2 font-sans text-[15px] text-olive">
           ファイルを渡して、依頼内容を書くだけ。Claude が解析してレポートを作ります。
         </p>
       </header>
@@ -75,7 +80,7 @@ export default function NewTask() {
         <CardHeader>
           <CardTitle>① 対象データ</CardTitle>
         </CardHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="flex gap-2">
             <TabButton active={mode === 'upload'} onClick={() => setMode('upload')}>
               ファイルアップロード
@@ -88,7 +93,7 @@ export default function NewTask() {
             <FileDropzone files={files} setFiles={setFiles} />
           ) : (
             <input
-              className="w-full rounded-md bg-slate-900 border border-slate-800 px-3 py-2 text-sm"
+              className="w-full rounded-card border border-border-warm bg-white px-3 py-2.5 font-mono text-[13px] text-near"
               placeholder="https://github.com/org/repo.git"
               value={gitUrl}
               onChange={(e) => setGitUrl(e.target.value)}
@@ -103,7 +108,7 @@ export default function NewTask() {
         </CardHeader>
         <textarea
           rows={6}
-          className="w-full rounded-md bg-slate-900 border border-slate-800 px-3 py-2 text-sm"
+          className="w-full rounded-card border border-border-warm bg-white px-3 py-2.5 font-sans text-[15px] leading-[1.6] text-near placeholder:text-stone"
           placeholder="例: このパケットキャプチャに含まれる怪しい通信を検出してください。TCP retransmit が多い宛先、DNS クエリの異常も含めて。"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -115,7 +120,7 @@ export default function NewTask() {
           <CardTitle>③ プロファイル</CardTitle>
         </CardHeader>
         <select
-          className="w-full rounded-md bg-slate-900 border border-slate-800 px-3 py-2 text-sm"
+          className="w-full rounded-card border border-border-warm bg-white px-3 py-2.5 font-sans text-[14px] text-near"
           value={profileId}
           onChange={(e) => setProfileId(e.target.value)}
         >
@@ -128,12 +133,12 @@ export default function NewTask() {
       </Card>
 
       {error && (
-        <Card className="border-red-900/60 bg-red-900/10">
-          <div className="text-sm text-red-300">エラー: {error}</div>
+        <Card className="border-[#e0a9a9] bg-[#f8e5e5]">
+          <div className="font-sans text-sm text-error-crimson">エラー: {error}</div>
         </Card>
       )}
 
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-3">
         <Button variant="ghost" onClick={() => router.back()}>
           キャンセル
         </Button>
@@ -158,10 +163,10 @@ function TabButton({
     <button
       onClick={onClick}
       className={
-        'rounded-md px-3 py-1.5 text-sm ' +
+        'rounded-card px-4 py-2 font-sans text-[13px] transition ' +
         (active
-          ? 'bg-brand-500/20 text-brand-50 border border-brand-500/50'
-          : 'bg-slate-800 text-slate-300')
+          ? 'bg-near text-ivory'
+          : 'bg-sand text-charcoal hover:shadow-ring')
       }
     >
       {children}
@@ -177,25 +182,33 @@ function FileDropzone({ files, setFiles }: { files: File[]; setFiles: (f: File[]
         setFiles([...files, ...Array.from(e.dataTransfer.files)]);
       }}
       onDragOver={(e) => e.preventDefault()}
-      className="rounded-lg border-2 border-dashed border-slate-700 bg-slate-900/30 p-6 text-center"
+      className="rounded-hero border-2 border-dashed border-border-warm bg-parchment p-10 text-center"
     >
-      <p className="text-sm text-slate-400">
-        ここにファイルをドラッグ&ドロップ (.pcap / .xlsx / .pdf / .zip / ...)
+      <p className="font-sans text-[14px] text-olive">
+        ここにファイルをドラッグ&ドロップ
       </p>
-      <input
-        type="file"
-        multiple
-        className="mt-3 block w-full text-xs"
-        onChange={(e) => {
-          if (e.target.files) setFiles([...files, ...Array.from(e.target.files)]);
-        }}
-      />
+      <p className="mt-1 font-sans text-[12px] text-stone">
+        .pcap / .xlsx / .pptx / .pdf / .docx / .csv / .zip ほか
+      </p>
+      <label className="mt-4 inline-flex cursor-pointer">
+        <span className="rounded-card bg-sand px-4 py-2 font-sans text-[13px] text-charcoal shadow-ring hover:shadow-ring-deep">
+          ファイルを選択
+        </span>
+        <input
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) setFiles([...files, ...Array.from(e.target.files)]);
+          }}
+        />
+      </label>
       {files.length > 0 && (
-        <ul className="mt-3 space-y-1 text-left text-xs text-slate-300">
+        <ul className="mt-5 space-y-1 text-left font-mono text-[12px] text-olive">
           {files.map((f, i) => (
-            <li key={i} className="flex justify-between">
+            <li key={i} className="flex justify-between border-t border-border-cream pt-2">
               <span className="truncate">{f.name}</span>
-              <span className="text-slate-500">{(f.size / 1024).toFixed(1)} KB</span>
+              <span className="text-stone">{(f.size / 1024).toFixed(1)} KB</span>
             </li>
           ))}
         </ul>
