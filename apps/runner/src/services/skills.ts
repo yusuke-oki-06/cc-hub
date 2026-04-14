@@ -76,6 +76,29 @@ export async function listSkills(filter?: { status?: SkillRow['status'] }): Prom
   return rows;
 }
 
+export async function getSkill(
+  skillId: string,
+): Promise<(SkillRow & { contentText: string | null }) | null> {
+  const rows = await sql<Array<SkillRow & { content: Buffer }>>`
+    SELECT id::text, slug, version, title, description,
+      author_id::text AS "authorId", status, scan_report AS "scanReport",
+      created_at::text AS "createdAt", content
+    FROM skills WHERE id = ${skillId}::uuid LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  const { content, ...rest } = row;
+  // best-effort: SKILL.md plain text. tar.gz binary skipped.
+  let contentText: string | null = null;
+  try {
+    const text = content.toString('utf8');
+    if (text.startsWith('---') || text.length < 100_000) contentText = text;
+  } catch {
+    // noop
+  }
+  return { ...rest, contentText };
+}
+
 export async function approveSkill(
   skillId: string,
   adminId: string,

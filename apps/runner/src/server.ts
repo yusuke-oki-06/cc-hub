@@ -624,6 +624,12 @@ app.get('/api/skills', async (c) => {
   const status = c.req.query('status') as 'published' | 'scan_passed' | undefined;
   return c.json({ skills: await listSkills(status ? { status } : undefined) });
 });
+app.get('/api/skills/:id', async (c) => {
+  const { getSkill } = await import('./services/skills.js');
+  const skill = await getSkill(c.req.param('id'));
+  if (!skill) return c.json({ error: 'not found' }, 404);
+  return c.json(skill);
+});
 app.post('/api/skills', async (c) => {
   const { publishSkill, PublishSkillSchema } = await import('./services/skills.js');
   const parsed = PublishSkillSchema.safeParse(await c.req.json().catch(() => ({})));

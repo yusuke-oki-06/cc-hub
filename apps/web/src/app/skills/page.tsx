@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
+// Link already imported below; this is just to keep the diff minimal.
 
 interface Skill {
   id: string;
@@ -62,23 +63,32 @@ export default function SkillsPage() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {skills.map((s) => (
-          <Card key={s.id}>
-            <CardHeader>
-              <CardTitle>{s.title}</CardTitle>
-              <Badge tone={statusTone(s.status)}>{s.status}</Badge>
-            </CardHeader>
-            <p className="font-sans text-[13px] text-olive">{s.description ?? '—'}</p>
-            <div className="mt-2 flex items-center justify-between font-mono text-[11px] text-stone">
-              <span>
-                {s.slug} · v{s.version}
-              </span>
-              {s.status === 'published' && (
-                <Button size="sm" onClick={() => install(s.id)}>
-                  install
-                </Button>
-              )}
-            </div>
-          </Card>
+          <Link key={s.id} href={`/skills/${s.id}`}>
+            <Card className="hover:shadow-ring transition cursor-pointer">
+              <CardHeader>
+                <CardTitle>{s.title}</CardTitle>
+                <Badge tone={statusTone(s.status)}>{s.status}</Badge>
+              </CardHeader>
+              <p className="font-sans text-[13px] text-olive">{s.description ?? '—'}</p>
+              <div className="mt-2 flex items-center justify-between font-mono text-[11px] text-stone">
+                <span>
+                  {s.slug} · v{s.version}
+                </span>
+                {s.status === 'published' && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void install(s.id);
+                    }}
+                    className="rounded-card bg-terracotta px-3 py-1 font-sans text-[12px] text-ivory hover:bg-[#b5573a]"
+                  >
+                    install
+                  </button>
+                )}
+              </div>
+            </Card>
+          </Link>
         ))}
         {skills.length === 0 && (
           <Card>
