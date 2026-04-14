@@ -1,0 +1,226 @@
+import Docker from 'dockerode';
+import { PassThrough } from 'node:stream';
+import { join } from 'node:path';
+import { StreamJsonParser } from './stream-parser.js';
+import type { ClaudeStreamEvent, ClaudeStdinMessage } from '@cc-hub/shared';
+
+const docker = new Docker();
+
+export interface CreateSandboxInput {
+  sessionId: string;
+  profileId: string;
+  image: string;                     // e.g. 'cc-hub-sandbox:0.1.0'
+  credentialsHostPath: string;       // e.g. 'C:\\Users\\koori\\.claude\\.credentials.json'
+  hookUrl: string;                   // e.g. 'http://host.docker.internal:4000'
+  hookToken: string;
+  memoryMb: number;                  // e.g. 4096
+  cpuCount: number;                  // e.g. 2
+  diskSizeMb: number;                // not enforced on Linux kernel level without --storage-opt, best-effort
+  extraEnv?: Record<string, string>;
+  extraBinds?: string[];             // additional bind mounts ('host:container[:ro]')
+}
+
+export interface SandboxHandle {
+  containerId: string;
+  stop(): Promise<void>;
+  remove(): Promise<void>;
+  cpToWorkspace(archiveTarStream: NodeJS.ReadableStream): Promise<void>;
+  cpFromWorkspace(path: string): Promise<NodeJS.ReadableStream>;
+  execClaude(input: ClaudeExecInput): Promise<ClaudeExecHandle>;
+}
+
+export interface ClaudeExecInput {
+  prompt: string;
+  allowedTools: string[];
+  disallowedTools: string[];
+  resumeSessionId?: string;
+  maxTurns: number;
+  timeLimitSeconds: number;
+}
+
+export interface ClaudeExecHandle {
+  execId: string;
+  abort(reason?: string): Promise<void>;
+  send(msg: ClaudeStdinMessage): void;
+  onEvent(cb: (ev: ClaudeStreamEvent) => void): void;
+  onExit(cb: (code: number | null) => void): void;
+  onError(cb: (err: Error) => void): void;
+}
+
+export async function createSandbox(input: CreateSandboxInput): Promise<SandboxHandle> {
+  const labels = {
+    'com.cc-hub.session-id': input.sessionId,
+    'com.cc-hub.profile-id': input.profileId,
+    'com.cc-hub.role': 'sandbox',
+  };
+
+  const env = [
+    `CC_HUB_HOOK_URL=${input.hookUrl}`,
+    `CC_HUB_HOOK_TOKEN=${input.hookToken}`,
+    `CC_HUB_SESSION_ID=${input.sessionId}`,
+    `CC_HUB_PROFILE_ID=${input.profileId}`,
+    ...Object.entries(input.extraEnv ?? {}).map(([k, v]) => `${k}=${v}`),
+  ];
+
+  const binds = [
+    `${input.credentialsHostPath}:/home/app/.claude/.credentials.json:ro`,
+    ...(input.extraBinds ?? []),
+  ];
+
+  const container = await docker.createContainer({
+    Image: input.image,
+    Labels: labels,
+    Env: env,
+    WorkingDir: '/workspace',
+    Tty: false,
+    OpenStdin: false,
+    AttachStdin: false,
+    AttachStdout: false,
+    AttachStderr: false,
+    Cmd: ['sleep', 'infinity'],
+    HostConfig: {
+      AutoRemove: false,
+      Binds: binds,
+      Memory: input.memoryMb * 1024 * 1024,
+      MemorySwap: input.memoryMb * 1024 * 1024,
+      NanoCpus: input.cpuCount * 1_000_000_000,
+      PidsLimit: 512,
+      SecurityOpt: ['no-new-privileges:true'],
+      CapDrop: ['ALL'],
+      CapAdd: ['CHOWN', 'DAC_OVERRIDE', 'SETUID', 'SETGID'],
+      ReadonlyRootfs: false,
+      Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=256m' },
+      ExtraHosts: ['host.docker.internal:host-gateway'],
+    },
+  });
+
+  await container.start();
+
+  return {
+    containerId: container.id,
+    stop: async () => {
+      try {
+        await container.stop({ t: 5 });
+      } catch {
+        // noop
+      }
+    },
+    remove: async () => {
+      try {
+        await container.remove({ force: true });
+      } catch {
+        // noop
+      }
+    },
+    cpToWorkspace: async (archive) => {
+      await container.putArchive(archive as unknown as NodeJS.ReadableStream, { path: '/workspace' });
+    },
+    cpFromWorkspace: async (path) => {
+      const fullPath = join('/workspace', path).replaceAll('\\', '/');
+      const res = await container.getArchive({ path: fullPath });
+      return res as unknown as NodeJS.ReadableStream;
+    },
+    execClaude: async (ec) => {
+      return startClaudeExec(container, ec);
+    },
+  };
+}
+
+async function startClaudeExec(
+  container: Docker.Container,
+  input: ClaudeExecInput,
+): Promise<ClaudeExecHandle> {
+  const args = [
+    '-p',
+    input.prompt,
+    '--output-format=stream-json',
+    '--input-format=stream-json',
+    '--verbose',
+    '--include-partial-messages',
+    `--max-turns=${input.maxTurns}`,
+  ];
+  if (input.allowedTools.length > 0) args.push('--allowed-tools', input.allowedTools.join(','));
+  if (input.disallowedTools.length > 0)
+    args.push('--disallowed-tools', input.disallowedTools.join(','));
+  if (input.resumeSessionId) args.push('--resume', input.resumeSessionId);
+
+  const exec = await container.exec({
+    Cmd: ['claude', ...args],
+    AttachStdin: true,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false,
+    WorkingDir: '/workspace',
+  });
+
+  const duplex = (await exec.start({ hijack: true, stdin: true })) as NodeJS.ReadWriteStream;
+
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  container.modem.demuxStream(duplex, stdout, stderr);
+
+  const parser = new StreamJsonParser();
+  const eventListeners = new Set<(ev: ClaudeStreamEvent) => void>();
+  const exitListeners = new Set<(code: number | null) => void>();
+  const errorListeners = new Set<(err: Error) => void>();
+
+  stdout.setEncoding('utf8');
+  stdout.on('data', (chunk: string) => {
+    for (const ev of parser.push(chunk)) for (const cb of eventListeners) cb(ev);
+  });
+
+  stderr.setEncoding('utf8');
+  stderr.on('data', (chunk: string) => {
+    for (const cb of eventListeners) cb({ type: 'runner.stderr', text: chunk.slice(0, 4096) });
+  });
+
+  duplex.on('error', (err) => {
+    for (const cb of errorListeners) cb(err);
+  });
+
+  duplex.on('end', async () => {
+    for (const ev of parser.flush()) for (const cb of eventListeners) cb(ev);
+    const info = await exec.inspect().catch(() => null);
+    const code = info?.ExitCode ?? null;
+    for (const cb of exitListeners) cb(code);
+  });
+
+  const timeLimit = setTimeout(
+    () => {
+      for (const cb of errorListeners) cb(new Error('session_time_limit_exceeded'));
+      try {
+        duplex.end();
+      } catch {
+        // noop
+      }
+    },
+    input.timeLimitSeconds * 1000,
+  );
+  timeLimit.unref();
+
+  return {
+    execId: exec.id,
+    abort: async (reason?: string) => {
+      for (const cb of eventListeners) cb({ type: 'runner.aborted', reason: reason ?? 'manual' });
+      try {
+        duplex.end();
+      } catch {
+        // noop
+      }
+    },
+    send: (msg) => {
+      if ((duplex as unknown as { writable?: boolean }).writable !== false) {
+        duplex.write(JSON.stringify(msg) + '\n');
+      }
+    },
+    onEvent: (cb) => {
+      eventListeners.add(cb);
+    },
+    onExit: (cb) => {
+      exitListeners.add(cb);
+    },
+    onError: (cb) => {
+      errorListeners.add(cb);
+    },
+  };
+}

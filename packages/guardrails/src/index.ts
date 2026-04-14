@@ -5,4 +5,5 @@ export * from './secret-block.js';
 export * from './secret-redactor.js';
 export * from './git-sanitize.js';
 export * from './workspace-provider.js';
+export * from './docker-workspace-provider.js';
 export * from './budget.js';
