@@ -142,6 +142,7 @@ async function startClaudeExec(
     input.prompt,
     '--output-format=stream-json',
     '--verbose',
+    '--include-partial-messages',
     `--max-turns=${input.maxTurns}`,
   ];
   if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
@@ -180,18 +181,42 @@ async function startClaudeExec(
 
   stderr.setEncoding('utf8');
   stderr.on('data', (chunk: string) => {
-    for (const cb of eventListeners) cb({ type: 'runner.stderr', text: chunk.slice(0, 4096) });
+    // Publish full stderr; publishEvent layer applies SSE_EVENT_MAX_BYTES cap
+    for (const cb of eventListeners) cb({ type: 'runner.stderr', text: chunk });
   });
 
   duplex.on('error', (err) => {
     for (const cb of errorListeners) cb(err);
   });
 
-  duplex.on('end', async () => {
+  // onExit must fire exactly once. 'end' and 'close' can both arrive (or only
+  // one may, depending on dockerode multiplexed stream behavior), so guard
+  // with an idempotent flag. If exec.inspect() rejects or returns null, we
+  // fall back to code = -1 so downstream always sees a terminal state.
+  let exited = false;
+  async function fireExit(reason: string): Promise<void> {
+    if (exited) return;
+    exited = true;
+    clearTimeout(watchdog);
     for (const ev of parser.flush()) for (const cb of eventListeners) cb(ev);
-    const info = await exec.inspect().catch(() => null);
-    const code = info?.ExitCode ?? null;
+    let code: number | null = null;
+    try {
+      const info = await exec.inspect();
+      code = info?.ExitCode ?? null;
+    } catch {
+      code = -1;
+    }
+    // If docker reports still running (ExitCode null) and we got here via
+    // watchdog, mark as failure so UI does not hang on "running" forever.
+    if (code === null && reason !== 'end') code = -1;
     for (const cb of exitListeners) cb(code);
+  }
+
+  duplex.on('end', () => {
+    void fireExit('end');
+  });
+  duplex.on('close', () => {
+    void fireExit('close');
   });
 
   const timeLimit = setTimeout(
@@ -206,6 +231,23 @@ async function startClaudeExec(
     input.timeLimitSeconds * 1000,
   );
   timeLimit.unref();
+
+  // Hard watchdog: if neither 'end' nor 'close' fires within
+  // timeLimitSeconds + 30s, forcibly mark the exec as exited so the task
+  // escapes the "running" state. This covers dockerode edge cases where the
+  // multiplexed stream never signals termination.
+  const watchdog = setTimeout(
+    () => {
+      if (!exited) {
+        console.error(
+          `[docker-driver] watchdog firing for exec ${exec.id} after ${input.timeLimitSeconds + 30}s`,
+        );
+        void fireExit('watchdog');
+      }
+    },
+    (input.timeLimitSeconds + 30) * 1000,
+  );
+  watchdog.unref();
 
   return {
     execId: exec.id,
