@@ -5,6 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
 
+function toBase64Utf8(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
 const TEMPLATE = `---
 name: my-skill
 description: ここに Skill の目的を 1 行で書く
@@ -40,7 +47,7 @@ export default function NewSkill() {
           version,
           title,
           description: description || undefined,
-          contentBase64: Buffer.from(md, 'utf8').toString('base64'),
+          contentBase64: toBase64Utf8(md),
           contentKind: 'skill_md',
         }),
       });

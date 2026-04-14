@@ -606,6 +606,52 @@ app.get('/api/sessions/:id/files/*', async (c) => {
   }
 });
 
+// ---------- Active sessions (multi-session dashboard) ----------
+app.get('/api/sessions/active', async (c) => {
+  const { listActiveSessionsForUser } = await import('./services/active-sessions-list.js');
+  return c.json({ sessions: await listActiveSessionsForUser(c.get('userId')) });
+});
+
+// ---------- Admin: usage summary ----------
+app.get('/api/admin/usage-summary', async (c) => {
+  const { getUsageSummary } = await import('./services/usage-summary.js');
+  return c.json(await getUsageSummary());
+});
+
+// ---------- Skills (marketplace) ----------
+app.get('/api/skills', async (c) => {
+  const { listSkills } = await import('./services/skills.js');
+  const status = c.req.query('status') as 'published' | 'scan_passed' | undefined;
+  return c.json({ skills: await listSkills(status ? { status } : undefined) });
+});
+app.post('/api/skills', async (c) => {
+  const { publishSkill, PublishSkillSchema } = await import('./services/skills.js');
+  const parsed = PublishSkillSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  const row = await publishSkill(c.get('userId'), parsed.data);
+  return c.json(row);
+});
+app.post('/api/admin/skills/:id/approve', async (c) => {
+  const { approveSkill } = await import('./services/skills.js');
+  await approveSkill(c.req.param('id'), c.get('userId'));
+  return c.json({ ok: true });
+});
+app.post('/api/admin/skills/:id/reject', async (c) => {
+  const { rejectSkill } = await import('./services/skills.js');
+  await rejectSkill(c.req.param('id'), c.get('userId'));
+  return c.json({ ok: true });
+});
+app.post('/api/skills/:id/install', async (c) => {
+  const { installSkill } = await import('./services/skills.js');
+  const { profileId } = await c.req.json<{ profileId?: string }>();
+  await installSkill({
+    userId: c.get('userId'),
+    profileId: profileId ?? 'default',
+    skillId: c.req.param('id'),
+  });
+  return c.json({ ok: true });
+});
+
 // ---------- Dev helpers ----------
 app.post('/api/dev/publish', async (c) => {
   const body = await c.req.json<{ sessionId: string; eventType: string; payload: unknown }>();
