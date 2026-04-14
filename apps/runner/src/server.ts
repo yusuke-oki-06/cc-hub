@@ -13,6 +13,9 @@ import {
   destroySession,
   getActiveSession,
   shutdownAllSessions,
+  touchSession,
+  setClaudeSessionId,
+  type ActiveSession,
 } from './services/sessions.js';
 import { getProfile, listProfiles, upsertProfile, CreateProfileSchema } from './services/profiles.js';
 import { assertBudgetOk, getBudgetState, addUsage } from './services/budgets.js';
@@ -206,58 +209,77 @@ app.post('/api/sessions/:id/git-clone', async (c) => {
   return c.json({ ok: true });
 });
 
-// ---------- Start / resume claude exec ----------
+// ---------- Start / continue claude turns ----------
+// 1 ターン = 1 `claude -p <prompt>` exec。初回以降は --resume で context 維持。
+// container は session 生存中は維持 (onExit で destroy しない)。
 const StartClaudeSchema = z.object({
   prompt: z.string().min(1).optional(),
   allowedTools: z.array(z.string()).optional(),
   disallowedTools: z.array(z.string()).optional(),
-  resumeSessionId: z.string().optional(),
 });
-app.post('/api/sessions/:id/claude/start', async (c) => {
-  const sessionId = c.req.param('id');
-  const session = getActiveSession(sessionId);
-  if (!session) return c.json({ error: 'session not active' }, 404);
-  if (session.userId !== c.get('userId')) return c.json({ error: 'forbidden' }, 403);
+const PromptSchema = z.object({ text: z.string().min(1) });
 
-  const parsed = StartClaudeSchema.safeParse(await c.req.json().catch(() => ({})));
-  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
-
+async function runTurn(
+  session: ActiveSession,
+  opts: { prompt: string; isFirstTurn: boolean },
+): Promise<void> {
   const profile = await getProfile(session.profileId);
-  const task = await getTask(session.taskId, session.userId);
 
+  await publishEvent({
+    sessionId: session.sessionId,
+    eventType: 'turn.started',
+    payload: {
+      role: 'user',
+      text: opts.prompt,
+      claudeSessionId: session.claudeSessionId ?? null,
+    },
+  });
+
+  touchSession(session.sessionId);
   const exec = await session.sandbox.execClaude({
-    prompt: parsed.data.prompt ?? task?.prompt ?? 'Inspect the /workspace directory and describe what you find.',
-    allowedTools: parsed.data.allowedTools ?? profile.allowedTools,
-    disallowedTools: parsed.data.disallowedTools ?? profile.disallowedTools,
-    resumeSessionId: parsed.data.resumeSessionId,
+    prompt: opts.prompt,
+    allowedTools: profile.allowedTools,
+    disallowedTools: profile.disallowedTools,
+    resumeSessionId: opts.isFirstTurn ? undefined : session.claudeSessionId,
     maxTurns: profile.maxTurns,
     timeLimitSeconds: profile.timeLimitSeconds,
   });
-
   session.claudeExec = exec;
   await setTaskStatus(session.taskId, 'running');
+  await sql`
+    UPDATE sessions SET
+      last_activity_at = now(),
+      turn_count = turn_count + 1,
+      status = 'active'
+    WHERE id = ${session.sessionId}::uuid
+  `;
 
   const traceCtx = startSessionTrace({
-    sessionId,
+    sessionId: session.sessionId,
     taskId: session.taskId,
     userId: session.userId,
     profileId: profile.id,
-    prompt: parsed.data.prompt ?? task?.prompt ?? '',
+    prompt: opts.prompt,
   });
-  const deepLink = langfuseDeepLink(traceCtx.traceId);
-  if (deepLink) {
-    await publishEvent({
-      sessionId,
-      eventType: 'system.init',
-      payload: { langfuseTraceUrl: deepLink, traceId: traceCtx.traceId },
-    });
-  }
 
   exec.onEvent(async (event) => {
     try {
       traceCtx.observeEvent(event);
+      if (
+        (event.type === 'system' || event.type === 'system.init') &&
+        typeof (event as { session_id?: string }).session_id === 'string'
+      ) {
+        const cid = (event as { session_id?: string }).session_id!;
+        if (!session.claudeSessionId) {
+          setClaudeSessionId(session.sessionId, cid);
+          await sql`
+            UPDATE sessions SET claude_session_id = ${cid}
+            WHERE id = ${session.sessionId}::uuid AND claude_session_id IS NULL
+          `;
+        }
+      }
       await publishEvent({
-        sessionId,
+        sessionId: session.sessionId,
         eventType: mapClaudeEventType(event.type),
         payload: event,
         parentToolUseId: event.parent_tool_use_id,
@@ -273,51 +295,89 @@ app.post('/api/sessions/:id/claude/start', async (c) => {
           const newState = await addUsage(session.userId, cost);
           if (newState.dailyUsedUsd > newState.dailyCapUsd) {
             await publishEvent({
-              sessionId,
+              sessionId: session.sessionId,
               eventType: 'budget.exceeded',
               payload: { kind: 'daily', ...newState },
             });
             await session.claudeExec?.abort('budget_exceeded');
+            await destroySession(session.sessionId);
           }
         }
       }
+      touchSession(session.sessionId);
     } catch (err) {
       console.error('[runner] onEvent error', err);
     }
   });
+
   exec.onExit(async (code) => {
-    await setTaskStatus(session.taskId, code === 0 ? 'succeeded' : 'failed');
     await publishEvent({
-      sessionId,
-      eventType: 'result',
+      sessionId: session.sessionId,
+      eventType: 'turn.ended',
       payload: { exitCode: code },
     });
+    await setTaskStatus(
+      session.taskId,
+      code === 0 ? 'succeeded' : 'failed',
+    );
+    await sql`
+      UPDATE sessions SET last_activity_at = now() WHERE id = ${session.sessionId}::uuid
+    `;
     await traceCtx.end({ exitCode: code });
+    // container は follow-up 用に維持。idle sweeper (30 min) or DELETE で破棄
+    session.claudeExec = undefined;
   });
+
   exec.onError(async (err) => {
     await publishEvent({
-      sessionId,
+      sessionId: session.sessionId,
       eventType: 'error',
       payload: { message: err.message },
     });
-    await setTaskStatus(session.taskId, 'failed');
     await traceCtx.end({ error: err.message });
+    session.claudeExec = undefined;
   });
+}
 
+app.post('/api/sessions/:id/claude/start', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = getActiveSession(sessionId);
+  if (!session) return c.json({ error: 'session not active' }, 404);
+  if (session.userId !== c.get('userId')) return c.json({ error: 'forbidden' }, 403);
+
+  const parsed = StartClaudeSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  const task = await getTask(session.taskId, session.userId);
+  const prompt =
+    parsed.data.prompt ??
+    task?.prompt ??
+    'Inspect the /workspace directory and describe what you find.';
+
+  await runTurn(session, { prompt, isFirstTurn: true });
   return c.json({ ok: true });
 });
 
 app.post('/api/sessions/:id/claude/prompt', async (c) => {
   const sessionId = c.req.param('id');
   const session = getActiveSession(sessionId);
-  if (!session?.claudeExec) return c.json({ error: 'claude not started' }, 409);
+  if (!session) return c.json({ error: 'session not active' }, 404);
   if (session.userId !== c.get('userId')) return c.json({ error: 'forbidden' }, 403);
+  if (session.claudeExec) {
+    return c.json({ error: 'previous turn still running' }, 409);
+  }
 
-  const { text } = await c.req.json<{ text: string }>();
-  session.claudeExec.send({
-    type: 'user',
-    message: { role: 'user', content: [{ type: 'text', text }] },
+  const parsed = PromptSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+
+  await writeAudit({
+    userId: session.userId,
+    sessionId,
+    taskId: session.taskId,
+    kind: 'prompt',
+    payload: { role: 'user', text: parsed.data.text, followUp: true },
   });
+
+  await runTurn(session, { prompt: parsed.data.text, isFirstTurn: false });
   return c.json({ ok: true });
 });
 

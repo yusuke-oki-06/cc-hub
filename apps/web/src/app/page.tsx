@@ -54,9 +54,6 @@ export default function Home() {
       <header className="flex items-start justify-between border-b border-border-warm pb-6">
         <div>
           <h1 className="font-serif text-[48px] leading-[1.1] text-near">CC Hub</h1>
-          <p className="mt-2 font-sans text-[15px] text-olive">
-            社内 AI 業務アシスタント基盤 — Phase 1 PoC
-          </p>
         </div>
         <nav className="flex items-center gap-1">
           <Link href="/audit">

@@ -14,6 +14,9 @@ export const SseEventTypeSchema = z.enum([
   'error',
   'guardrail.blocked',
   'budget.exceeded',
+  'saas_link',
+  'turn.started',
+  'turn.ended',
 ]);
 export type SseEventType = z.infer<typeof SseEventTypeSchema>;
 

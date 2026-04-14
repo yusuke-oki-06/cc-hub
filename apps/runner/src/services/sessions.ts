@@ -16,7 +16,19 @@ export interface ActiveSession {
   profileId: string;
   sandbox: SandboxHandle;
   claudeExec?: Awaited<ReturnType<SandboxHandle['execClaude']>>;
+  claudeSessionId?: string;       // Claude CLI's internal session id, captured from system.init
   createdAt: number;
+  lastActivityAt: number;
+}
+
+export function touchSession(sessionId: string): void {
+  const s = active.get(sessionId);
+  if (s) s.lastActivityAt = Date.now();
+}
+
+export function setClaudeSessionId(sessionId: string, claudeSessionId: string): void {
+  const s = active.get(sessionId);
+  if (s && !s.claudeSessionId) s.claudeSessionId = claudeSessionId;
 }
 
 const active = new Map<string, ActiveSession>();
@@ -129,9 +141,32 @@ export async function createSession(input: CreateSessionInput): Promise<ActiveSe
     profileId: input.profile.id,
     sandbox,
     createdAt: Date.now(),
+    lastActivityAt: Date.now(),
   };
   active.set(sessionId, session);
+  ensureIdleSweeper();
   return session;
+}
+
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Idle sweeper: destroy sessions inactive for more than IDLE_TIMEOUT_MS.
+ * Runs every 5 minutes, starts automatically on first createSession call.
+ */
+let sweeperStarted = false;
+export function ensureIdleSweeper(): void {
+  if (sweeperStarted) return;
+  sweeperStarted = true;
+  setInterval(async () => {
+    const now = Date.now();
+    for (const s of [...active.values()]) {
+      if (now - s.lastActivityAt > IDLE_TIMEOUT_MS) {
+        console.log(`[sessions] idle timeout, destroying ${s.sessionId}`);
+        await destroySession(s.sessionId).catch(() => undefined);
+      }
+    }
+  }, 5 * 60 * 1000).unref();
 }
 
 export async function destroySession(sessionId: string): Promise<void> {
