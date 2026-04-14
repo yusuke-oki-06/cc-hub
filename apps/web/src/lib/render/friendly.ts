@@ -125,19 +125,27 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
 
     case 'result': {
       const code = payload.exitCode as number | undefined;
-      if (code !== undefined) {
+      const subtype = (payload as { subtype?: string }).subtype;
+      const isError = (payload as { is_error?: boolean }).is_error === true;
+      const text = (payload as { result?: string }).result;
+      const ok = code === 0 || subtype === 'success' || (code === undefined && !isError && subtype !== 'error');
+      const failExit = code !== undefined && code !== 0;
+      if (failExit || isError || subtype === 'error') {
         return {
           seq: ev.seq,
-          kind: code === 0 ? 'result.success' : 'result.failure',
-          title: code === 0 ? '完了しました' : `失敗しました (exit ${code})`,
+          kind: 'result.failure',
+          title: code !== undefined ? `失敗しました (exit ${code})` : '失敗しました',
+          body: typeof text === 'string' ? text : undefined,
           meta: time,
         };
       }
-      const text = (payload as { result?: string }).result;
-      if (typeof text === 'string') {
-        return { seq: ev.seq, kind: 'result.success', title: '最終回答', body: text, meta: time };
-      }
-      return { seq: ev.seq, kind: 'hidden', title: 'result.meta' };
+      return {
+        seq: ev.seq,
+        kind: ok ? 'result.success' : 'hidden',
+        title: '完了しました',
+        body: typeof text === 'string' ? text : undefined,
+        meta: time,
+      };
     }
 
     case 'guardrail.blocked': {
