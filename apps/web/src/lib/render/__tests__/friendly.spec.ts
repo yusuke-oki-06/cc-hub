@@ -21,9 +21,10 @@ describe('toFriendly', () => {
     expect(r.body).toBe('こんにちは');
   });
 
-  it('hides rate_limit_event wrapped in assistant.message', () => {
+  it('rate_limit_event (unknown status) surfaces as system line', () => {
     const r = toFriendly(ev(2, 'assistant.message', { type: 'rate_limit_event' }));
-    expect(r.kind).toBe('hidden');
+    // Only status==="allowed" is hidden as noise. Non-allowed surfaces as system.
+    expect(r.kind).toBe('system');
   });
 
   it('tool_use Bash summary', () => {
@@ -75,6 +76,30 @@ describe('toFriendly', () => {
     const r = toFriendly(ev(9, 'result', { exitCode: 0 }));
     expect(r.kind).toBe('result.success');
     expect(r.title).toContain('完了');
+  });
+
+  it('no emoji in any FriendlyItem title/body', () => {
+    const samples = [
+      ev(1, 'assistant.message', { message: { content: [{ type: 'text', text: 'hi' }] } }),
+      ev(2, 'tool_use', { name: 'Read', input: { file_path: '/a/b.txt' } }),
+      ev(3, 'tool_use', { name: 'Bash', input: { command: 'ls' } }),
+      ev(4, 'tool_result', { tool_use_id: 't', content: [{ type: 'text', text: 'ok' }] }),
+      ev(5, 'tool_result', { is_error: true, content: [] }),
+      ev(6, 'result', { exitCode: 0 }),
+      ev(7, 'result', { exitCode: 2 }),
+      ev(8, 'guardrail.blocked', { toolName: 'Bash', reason: 'x' }),
+      ev(9, 'budget.exceeded', { kind: 'daily' }),
+      ev(10, 'saas_link', { provider: 'Jira', url: 'https://x/browse/A-1' }),
+      ev(11, 'system.init', { taskId: 't' }),
+      ev(12, 'system.init', { model: 'claude-opus-4-6' }),
+      ev(13, 'error', { message: 'boom' }),
+    ];
+    const emojiRe = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}]/u;
+    for (const e of samples) {
+      const r = toFriendly(e);
+      expect(r.title, `title has emoji: ${r.title}`).not.toMatch(emojiRe);
+      if (r.body) expect(r.body, `body has emoji: ${r.body}`).not.toMatch(emojiRe);
+    }
   });
 
   it('result exitCode 2 failure', () => {
@@ -142,9 +167,9 @@ describe('toFriendly', () => {
     expect(r.kind).toBe('hidden');
   });
 
-  it('error raw parse_error is hidden', () => {
+  it('error raw parse_error surfaces as system line (low-noise)', () => {
     const r = toFriendly(ev(16, 'error', { raw: '{"type":...' }));
-    expect(r.kind).toBe('hidden');
+    expect(r.kind).toBe('system');
   });
 
   it('error with message is shown', () => {
@@ -177,16 +202,16 @@ describe('buildTimeline', () => {
     expect(items[0]?.kind).toBe('tool.finished');
   });
 
-  it('filters out hidden events (parse_error) but keeps progress', () => {
+  it('keeps parse_error as subdued system line, plus progress and assistant', () => {
     const items = buildTimeline([
-      ev(1, 'error', { raw: '{"type":...' }), // hidden
+      ev(1, 'error', { raw: '{"type":...' }), // subdued system line
       ev(2, 'system.init', { taskId: 't' }),  // progress
       ev(3, 'assistant.message', {
         message: { content: [{ type: 'text', text: 'hi' }] },
       }),
     ]);
-    expect(items).toHaveLength(2);
-    expect(items.map((i) => i.kind)).toEqual(['progress', 'assistant']);
+    expect(items).toHaveLength(3);
+    expect(items.map((i) => i.kind)).toEqual(['system', 'progress', 'assistant']);
   });
 
   it('preserves assistant, tool.finished, result ordering', () => {

@@ -9,10 +9,7 @@ import { api } from '@/lib/api';
 import { subscribeSession } from '@/lib/sse';
 import { buildTimeline, type FriendlyItem } from '@/lib/render/friendly';
 import { PromptComposer, type ComposerSubmit } from '@/components/prompt-composer';
-import { TerminalStream } from '@/components/terminal-stream';
 import type { SseEvent, ToolProfile } from '@cc-hub/shared';
-
-type ViewMode = 'conversation' | 'terminal' | 'json';
 
 interface Task {
   id: string;
@@ -31,7 +28,6 @@ export default function TaskView() {
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<SseEvent[]>([]);
   const [connected, setConnected] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('conversation');
   const [profile, setProfile] = useState<ToolProfile | undefined>();
   const [retrying, setRetrying] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -188,7 +184,6 @@ export default function TaskView() {
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <ViewSegment value={viewMode} onChange={setViewMode} />
           {isRunning && (
             <Button variant="dark" size="sm" onClick={onAbort} disabled={!sessionId}>
               中断
@@ -239,37 +234,22 @@ export default function TaskView() {
         <section className="space-y-4">
           <Card className="overflow-hidden">
             <CardHeader>
-              <CardTitle>
-                {viewMode === 'conversation' ? '会話' : viewMode === 'terminal' ? 'ターミナル' : '生イベント (JSON)'}
-              </CardTitle>
+              <CardTitle>会話</CardTitle>
               <span className="font-sans text-[12px] text-stone">
-                {viewMode === 'conversation'
-                  ? `${timeline.length} messages`
-                  : `${events.length} events`}
+                {timeline.length} messages
               </span>
             </CardHeader>
-            {viewMode === 'terminal' ? (
-              <TerminalStream events={events} />
-            ) : (
-              <div ref={listRef} className="max-h-[56vh] overflow-y-auto space-y-3 pr-1">
-                {viewMode === 'json'
-                  ? events.map((ev) => <RawEventRow key={ev.seq} ev={ev} />)
-                  : timeline.map((it) => (
-                      <FriendlyRow key={it.seq} item={it} sessionId={sessionId} />
-                    ))}
-                {viewMode === 'conversation' && (
-                  <ThinkingIndicator timeline={timeline} isRunning={isRunning} />
-                )}
-                {timeline.length === 0 &&
-                  viewMode === 'conversation' &&
-                  !isRunning &&
-                  !sessionId && (
-                    <div className="py-10 text-center font-sans text-[13px] text-stone">
-                      セッションを準備中…
-                    </div>
-                  )}
-              </div>
-            )}
+            <div ref={listRef} className="max-h-[64vh] overflow-y-auto space-y-3 pr-1">
+              {timeline.map((it) => (
+                <FriendlyRow key={it.seq} item={it} sessionId={sessionId} />
+              ))}
+              <ThinkingIndicator timeline={timeline} isRunning={isRunning} />
+              {timeline.length === 0 && !isRunning && !sessionId && (
+                <div className="py-10 text-center font-sans text-[13px] text-stone">
+                  セッションを準備中…
+                </div>
+              )}
+            </div>
           </Card>
 
           {/* Composer */}
@@ -358,38 +338,6 @@ export default function TaskView() {
   );
 }
 
-function ViewSegment({
-  value,
-  onChange,
-}: {
-  value: ViewMode;
-  onChange: (v: ViewMode) => void;
-}) {
-  const opts: Array<{ v: ViewMode; label: string; hint: string }> = [
-    { v: 'conversation', label: '会話', hint: '非エンジニア向け要約' },
-    { v: 'terminal', label: 'ターミナル', hint: 'CLI 相当の全イベント' },
-    { v: 'json', label: 'JSON', hint: '開発者向け raw dump' },
-  ];
-  return (
-    <div className="inline-flex overflow-hidden rounded-card border border-border-warm bg-white">
-      {opts.map((o) => (
-        <button
-          key={o.v}
-          type="button"
-          title={o.hint}
-          onClick={() => onChange(o.v)}
-          className={
-            'px-2.5 py-1 font-sans text-[12px] transition ' +
-            (value === o.v ? 'bg-sand text-near' : 'text-stone hover:bg-parchment')
-          }
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function ThinkingIndicator({
   timeline,
   isRunning,
@@ -447,6 +395,15 @@ function FriendlyRow({
   if (item.kind === 'permission') {
     return <PermissionInlineCard item={item} sessionId={sessionId} />;
   }
+  // 「system」行は小さく、罫線も背景もなし。CLI の補助情報として薄く流す。
+  if (item.kind === 'system') {
+    return (
+      <div className="flex items-baseline gap-2 px-2 py-1 font-mono text-[11.5px] text-stone">
+        {item.meta && <span className="shrink-0 text-[10px]">{item.meta}</span>}
+        <span className="min-w-0 flex-1 truncate">{item.title}</span>
+      </div>
+    );
+  }
   const kinds: Record<FriendlyItem['kind'], string> = {
     user: 'bg-sand border-ring-warm',
     assistant: 'bg-ivory border-border-cream',
@@ -459,6 +416,7 @@ function FriendlyRow({
     budget: 'bg-[#faf3dd] border-[#e3d196]',
     saas_link: 'bg-[#f1ece2] border-ring-warm',
     progress: 'bg-parchment border-border-cream text-olive italic',
+    system: '',
     hidden: '',
   };
   return (
@@ -610,22 +568,6 @@ function SaasPanel({ events }: { events: SseEvent[] }) {
         </div>
       )}
     </Card>
-  );
-}
-
-function RawEventRow({ ev }: { ev: SseEvent }) {
-  return (
-    <div className="rounded-card border border-border-cream bg-white px-3 py-2">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="font-sans text-[10px] uppercase tracking-[0.5px] text-stone">
-          seq {ev.seq} · {ev.type}
-        </span>
-        <span className="font-mono text-[10px] text-stone">{ev.createdAt?.slice(11, 19)}</span>
-      </div>
-      <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-[1.5] text-olive">
-        {JSON.stringify(ev.payload, null, 2).slice(0, 2000)}
-      </pre>
-    </div>
   );
 }
 

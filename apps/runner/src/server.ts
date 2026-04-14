@@ -292,6 +292,9 @@ async function runTurn(
   });
 
   touchSession(session.sessionId);
+  console.log(
+    `[runTurn] session=${session.sessionId.slice(0, 8)} task=${session.taskId.slice(0, 8)} profile=${profile.id} model=${ov.model ?? '(default)'} mode=${ov.permissionMode ?? 'default'} firstTurn=${opts.isFirstTurn} resume=${session.claudeSessionId ?? 'none'} allowedTools=${allowedTools.length} prompt="${opts.prompt.slice(0, 80)}"`,
+  );
   const exec = await session.sandbox.execClaude({
     prompt: opts.prompt,
     allowedTools,
@@ -303,6 +306,7 @@ async function runTurn(
     permissionMode: ov.permissionMode,
   });
   session.claudeExec = exec;
+  console.log(`[runTurn] exec started id=${exec.execId} session=${session.sessionId.slice(0, 8)}`);
   await setTaskStatus(session.taskId, 'running');
   await sql`
     UPDATE sessions SET
@@ -385,6 +389,7 @@ async function runTurn(
   });
 
   exec.onExit(async (code) => {
+    console.log(`[runTurn] exec exited id=${exec.execId} code=${code} session=${session.sessionId.slice(0, 8)}`);
     await publishEvent({
       sessionId: session.sessionId,
       eventType: 'turn.ended',
@@ -403,6 +408,7 @@ async function runTurn(
   });
 
   exec.onError(async (err) => {
+    console.error(`[runTurn] exec error id=${exec.execId} session=${session.sessionId.slice(0, 8)}`, err);
     await publishEvent({
       sessionId: session.sessionId,
       eventType: 'error',
@@ -715,6 +721,29 @@ app.get('/api/sessions/active', async (c) => {
 app.get('/api/admin/usage-summary', async (c) => {
   const { getUsageSummary } = await import('./services/usage-summary.js');
   return c.json(await getUsageSummary());
+});
+
+// ---------- Langfuse connectivity health (open, no auth) ----------
+app.get('/api/langfuse/health', async (c) => {
+  const host = (process.env.LANGFUSE_HOST ?? 'http://localhost:3100').replace(/\/$/, '');
+  const start = Date.now();
+  try {
+    const r = await fetch(`${host}/api/public/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    const latencyMs = Date.now() - start;
+    if (!r.ok) {
+      return c.json({ ok: false, host, latencyMs, error: `HTTP ${r.status}` });
+    }
+    return c.json({ ok: true, host, latencyMs });
+  } catch (err) {
+    return c.json({
+      ok: false,
+      host,
+      latencyMs: Date.now() - start,
+      error: (err as Error).message,
+    });
+  }
 });
 
 // ---------- Admin: latest Langfuse traces (proxied) ----------

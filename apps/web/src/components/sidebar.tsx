@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
 import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
+import { LangfuseBadge } from '@/components/langfuse-badge';
 
 interface Project {
   id: string;
@@ -197,8 +198,8 @@ export function Sidebar() {
         </Section>
       </div>
 
-      {/* Footer: budget */}
-      <div className="border-t border-ring-warm px-4 py-3">
+      {/* Footer: budget + Langfuse health */}
+      <div className="space-y-2 border-t border-ring-warm px-4 py-3">
         {budget ? (
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between font-sans text-[11px] text-stone">
@@ -219,6 +220,9 @@ export function Sidebar() {
         ) : (
           <div className="font-sans text-[11px] text-stone">利用量 読み込み中…</div>
         )}
+        <div className="pt-1">
+          <LangfuseBadge />
+        </div>
       </div>
     </aside>
   );

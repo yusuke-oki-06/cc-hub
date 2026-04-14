@@ -17,27 +17,32 @@ const SUGGESTIONS = [
     title: 'パケキャプを解析',
     prompt:
       'このパケットキャプチャに含まれる怪しい通信を検出してください。TCP 再送が多い宛先、DNS クエリの異常も含めて。',
-    emoji: '📡',
   },
   {
     title: 'Excel を要約',
     prompt:
       'このエクセルのシートをすべて読み、各シートの目的・主要な指標・異常値 (外れ値) を日本語で箇条書きにしてください。',
-    emoji: '📊',
   },
   {
     title: 'パワポのレビュー',
     prompt:
       'このパワポの各スライドを日本語で 1 行に要約し、論旨が弱いところ / 補足が必要なところを指摘してください。',
-    emoji: '🎞',
   },
   {
     title: 'PDF 文書から要点抽出',
     prompt:
       'この PDF の要点を 10 項目以内にまとめ、引用したページ番号を併記してください。',
-    emoji: '📄',
   },
 ];
+
+type SubmitPhase = 'idle' | 'creating' | 'uploading' | 'starting' | 'navigating';
+function phaseLabel(phase: SubmitPhase, uploadIndex = 0, uploadTotal = 0): string {
+  if (phase === 'creating') return 'セッション作成中…';
+  if (phase === 'uploading') return `アップロード中 (${uploadIndex}/${uploadTotal})…`;
+  if (phase === 'starting') return 'Claude 起動中…';
+  if (phase === 'navigating') return 'タスク画面へ遷移中…';
+  return '実行 (⌘Enter)';
+}
 
 export default function Home() {
   const router = useRouter();
@@ -49,8 +54,10 @@ export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [gitUrl, setGitUrl] = useState('');
   const [mode, setMode] = useState<'upload' | 'git' | 'none'>('none');
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<SubmitPhase>('idle');
+  const [uploadProgress, setUploadProgress] = useState<{ index: number; total: number }>({ index: 0, total: 0 });
   const [error, setError] = useState<string>();
+  const loading = phase !== 'idle';
 
   useEffect(() => {
     void Promise.all([
@@ -61,19 +68,19 @@ export default function Home() {
 
   const submit = async () => {
     setError(undefined);
-    setLoading(true);
+    setPhase('creating');
     try {
       const created = await api<{ sessionId: string; taskId: string }>('/api/sessions', {
         method: 'POST',
         body: JSON.stringify({ profileId, prompt, projectId }),
       });
 
-      // Run ingest + claude/start in the foreground before navigating.
-      // Fire-and-forget after router.push is unreliable: React tears down
-      // the component and pending fetches can silently drop, leaving the
-      // task stuck in "queued" with no claude exec ever spawning.
       if (mode === 'upload' && files.length > 0) {
-        for (const f of files) {
+        setPhase('uploading');
+        setUploadProgress({ index: 0, total: files.length });
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          setUploadProgress({ index: i + 1, total: files.length });
           const form = new FormData();
           form.append('file', f);
           const r = await fetch(`${runnerBase}/api/sessions/${created.sessionId}/upload`, {
@@ -84,20 +91,24 @@ export default function Home() {
           if (!r.ok) throw new Error(`upload failed: ${f.name}`);
         }
       } else if (mode === 'git' && gitUrl) {
+        setPhase('uploading');
         await api(`/api/sessions/${created.sessionId}/git-clone`, {
           method: 'POST',
           body: JSON.stringify({ url: gitUrl }),
         });
       }
+
+      setPhase('starting');
       await api(`/api/sessions/${created.sessionId}/claude/start`, {
         method: 'POST',
         body: JSON.stringify({}),
       });
 
+      setPhase('navigating');
       router.push(`/tasks/${created.taskId}`);
     } catch (err) {
       setError((err as Error).message);
-      setLoading(false);
+      setPhase('idle');
     }
   };
 
@@ -132,12 +143,12 @@ export default function Home() {
             <AttachButton
               active={mode === 'upload'}
               onClick={() => setMode(mode === 'upload' ? 'none' : 'upload')}
-              label={files.length > 0 ? `📎 ${files.length} ファイル` : '📎 添付'}
+              label={files.length > 0 ? `添付 ${files.length} 件` : '添付'}
             />
             <AttachButton
               active={mode === 'git'}
               onClick={() => setMode(mode === 'git' ? 'none' : 'git')}
-              label={gitUrl ? '🔗 Git URL 設定済' : '🔗 Git'}
+              label={gitUrl ? 'Git URL 設定済' : 'Git'}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -164,7 +175,7 @@ export default function Home() {
               ))}
             </select>
             <Button size="sm" onClick={submit} disabled={!prompt.trim() || loading}>
-              {loading ? '起動中…' : '実行 (⌘Enter)'}
+              {phaseLabel(phase, uploadProgress.index, uploadProgress.total)}
             </Button>
           </div>
         </div>
@@ -185,6 +196,21 @@ export default function Home() {
         )}
       </Card>
 
+      {loading && (
+        <Card className="mt-4 border-border-warm bg-parchment/60">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex gap-[3px]">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.3s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.15s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta" />
+            </span>
+            <span className="font-sans text-[13px] text-olive">
+              現在: {phaseLabel(phase, uploadProgress.index, uploadProgress.total)}
+            </span>
+          </div>
+        </Card>
+      )}
+
       {error && (
         <Card className="mt-4 border-[#e0a9a9] bg-[#f8e5e5]">
           <div className="font-sans text-sm text-error-crimson">エラー: {error}</div>
@@ -203,10 +229,7 @@ export default function Home() {
               onClick={() => setPrompt(s.prompt)}
               className="rounded-card border border-border-cream bg-ivory px-4 py-3 text-left transition hover:shadow-ring"
             >
-              <div className="flex items-center gap-2">
-                <span className="text-[18px]">{s.emoji}</span>
-                <span className="font-serif text-[15px] text-near">{s.title}</span>
-              </div>
+              <div className="font-serif text-[15px] text-near">{s.title}</div>
               <p className="mt-1 line-clamp-2 font-sans text-[12px] text-olive">{s.prompt}</p>
             </button>
           ))}
