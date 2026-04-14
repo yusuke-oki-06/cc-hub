@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  @apply bg-slate-950 text-slate-100 antialiased;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+
+* {
+  @apply border-slate-800;
+}
+
+/* Animated caret for streaming messages */
+.stream-caret::after {
+  content: '▌';
+  @apply inline-block animate-pulse text-brand-500;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0b1120; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #334155; }

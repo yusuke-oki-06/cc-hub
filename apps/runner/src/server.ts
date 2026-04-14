@@ -18,6 +18,16 @@ import { getProfile, listProfiles, upsertProfile, CreateProfileSchema } from './
 import { assertBudgetOk, getBudgetState, addUsage } from './services/budgets.js';
 import { createTask, getTask, listTasks, setTaskStatus, addTaskCost } from './services/tasks.js';
 import { writeAudit, listAudit } from './services/audit.js';
+import {
+  listMcpIntegrations,
+  upsertMcpIntegration,
+  setProfileMcp,
+  McpIntegrationSchema,
+} from './services/mcp.js';
+import { startSessionTrace, langfuseDeepLink } from './observability/langfuse.js';
+import * as tar from 'tar-stream';
+import { PassThrough } from 'node:stream';
+import Docker from 'dockerode';
 import { zipToTar } from './ingest/zip.js';
 import { GitCloneInputSchema, MAX_UPLOAD_BYTES } from './ingest/validation.js';
 import { gitCloneIntoSandbox } from './ingest/git.js';
@@ -217,8 +227,25 @@ app.post('/api/sessions/:id/claude/start', async (c) => {
   session.claudeExec = exec;
   await setTaskStatus(session.taskId, 'running');
 
+  const traceCtx = startSessionTrace({
+    sessionId,
+    taskId: session.taskId,
+    userId: session.userId,
+    profileId: profile.id,
+    prompt: parsed.data.prompt ?? task?.prompt ?? '',
+  });
+  const deepLink = langfuseDeepLink(traceCtx.traceId);
+  if (deepLink) {
+    await publishEvent({
+      sessionId,
+      eventType: 'system.init',
+      payload: { langfuseTraceUrl: deepLink, traceId: traceCtx.traceId },
+    });
+  }
+
   exec.onEvent(async (event) => {
     try {
+      traceCtx.observeEvent(event);
       await publishEvent({
         sessionId,
         eventType: mapClaudeEventType(event.type),
@@ -233,7 +260,15 @@ app.post('/api/sessions/:id/claude/start', async (c) => {
               usage.output_tokens * PRICE_OUTPUT_PER_MTOKEN) /
             1_000_000;
           await addTaskCost(session.taskId, cost, usage.input_tokens, usage.output_tokens);
-          await addUsage(session.userId, cost);
+          const newState = await addUsage(session.userId, cost);
+          if (newState.dailyUsedUsd > newState.dailyCapUsd) {
+            await publishEvent({
+              sessionId,
+              eventType: 'budget.exceeded',
+              payload: { kind: 'daily', ...newState },
+            });
+            await session.claudeExec?.abort('budget_exceeded');
+          }
         }
       }
     } catch (err) {
@@ -247,6 +282,7 @@ app.post('/api/sessions/:id/claude/start', async (c) => {
       eventType: 'result',
       payload: { exitCode: code },
     });
+    await traceCtx.end({ exitCode: code });
   });
   exec.onError(async (err) => {
     await publishEvent({
@@ -255,6 +291,7 @@ app.post('/api/sessions/:id/claude/start', async (c) => {
       payload: { message: err.message },
     });
     await setTaskStatus(session.taskId, 'failed');
+    await traceCtx.end({ error: err.message });
   });
 
   return c.json({ ok: true });
@@ -270,6 +307,43 @@ app.post('/api/sessions/:id/claude/prompt', async (c) => {
   session.claudeExec.send({
     type: 'user',
     message: { role: 'user', content: [{ type: 'text', text }] },
+  });
+  return c.json({ ok: true });
+});
+
+// ---------- Permission resolution (HITL approval) ----------
+const ResolvePermissionSchema = z.object({
+  requestId: z.string().uuid(),
+  decision: z.enum(['allow', 'allow_once', 'deny']),
+  editedInput: z.unknown().optional(),
+});
+app.post('/api/sessions/:id/permission', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = getActiveSession(sessionId);
+  if (!session) return c.json({ error: 'session not active' }, 404);
+  if (session.userId !== c.get('userId')) return c.json({ error: 'forbidden' }, 403);
+  const parsed = ResolvePermissionSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+
+  await sql`
+    UPDATE permission_requests
+    SET status = ${parsed.data.decision === 'deny' ? 'denied' : parsed.data.decision === 'allow' ? 'allowed' : 'allowed_once'},
+        decided_by = ${session.userId}::uuid,
+        decided_at = now(),
+        edited_input = ${parsed.data.editedInput ? sql.json(parsed.data.editedInput as never) : null}
+    WHERE id = ${parsed.data.requestId}::uuid AND session_id = ${sessionId}::uuid
+  `;
+  await publishEvent({
+    sessionId,
+    eventType: 'permission_resolved',
+    payload: { requestId: parsed.data.requestId, decision: parsed.data.decision },
+  });
+  await writeAudit({
+    userId: session.userId,
+    sessionId,
+    taskId: session.taskId,
+    kind: 'permission',
+    payload: { requestId: parsed.data.requestId, decision: parsed.data.decision },
   });
   return c.json({ ok: true });
 });
@@ -316,6 +390,119 @@ app.get('/api/audit', async (c) => {
     limit,
   });
   return c.json({ entries });
+});
+
+// ---------- MCP integrations (admin) ----------
+app.get('/api/integrations', async (c) => c.json({ integrations: await listMcpIntegrations() }));
+app.post('/api/integrations', async (c) => {
+  const parsed = McpIntegrationSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  await upsertMcpIntegration(parsed.data);
+  return c.json({ ok: true });
+});
+const SetProfileMcpSchema = z.object({ profileId: z.string(), mcpIds: z.array(z.string().uuid()) });
+app.post('/api/integrations/profile-bind', async (c) => {
+  const parsed = SetProfileMcpSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  await setProfileMcp(parsed.data.profileId, parsed.data.mcpIds);
+  return c.json({ ok: true });
+});
+
+// ---------- File browser / viewer (session workspace output) ----------
+app.get('/api/sessions/:id/files', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = getActiveSession(sessionId);
+  if (!session) return c.json({ error: 'session not active' }, 404);
+  if (session.userId !== c.get('userId')) return c.json({ error: 'forbidden' }, 403);
+
+  const docker = new Docker();
+  const container = docker.getContainer(session.sandbox.containerId);
+  const exec = await container.exec({
+    Cmd: ['sh', '-c', 'cd /workspace && find . -maxdepth 4 -type f -printf "%P\\t%s\\n" | head -500'],
+    AttachStdout: true,
+    AttachStderr: true,
+    User: 'app',
+  });
+  const stream = (await exec.start({ hijack: true, stdin: false })) as NodeJS.ReadableStream;
+  const out = new PassThrough();
+  const err = new PassThrough();
+  container.modem.demuxStream(stream, out, err);
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve) => {
+    out.on('data', (c: Buffer) => chunks.push(c));
+    stream.on('end', () => resolve());
+  });
+  const text = Buffer.concat(chunks).toString('utf8');
+  const files = text
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [name, bytes] = line.split('\t');
+      return { name: name ?? '', bytes: Number(bytes ?? 0) };
+    })
+    .filter((f) => f.name);
+  return c.json({ files });
+});
+
+app.get('/api/sessions/:id/files/*', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = getActiveSession(sessionId);
+  if (!session) return c.json({ error: 'session not active' }, 404);
+  if (session.userId !== c.get('userId')) return c.json({ error: 'forbidden' }, 403);
+
+  const url = new URL(c.req.url);
+  const prefix = `/api/sessions/${sessionId}/files/`;
+  const rawPath = decodeURIComponent(url.pathname.slice(prefix.length));
+  if (rawPath.includes('..') || rawPath.startsWith('/')) {
+    return c.json({ error: 'invalid path' }, 400);
+  }
+
+  const docker = new Docker();
+  const container = docker.getContainer(session.sandbox.containerId);
+  try {
+    const archive = (await container.getArchive({
+      path: `/workspace/${rawPath}`,
+    })) as unknown as NodeJS.ReadableStream;
+
+    const extract = tar.extract();
+    const chunks: Buffer[] = [];
+    const done = new Promise<void>((resolve, reject) => {
+      extract.on('entry', (header, stream, next) => {
+        if (header.type !== 'file') {
+          stream.resume();
+          return next();
+        }
+        stream.on('data', (c: Buffer) => chunks.push(c));
+        stream.on('end', () => next());
+      });
+      extract.on('finish', resolve);
+      extract.on('error', reject);
+    });
+    archive.pipe(extract);
+    await done;
+    const body = Buffer.concat(chunks);
+    const lower = rawPath.toLowerCase();
+    const ctype = lower.endsWith('.pdf')
+      ? 'application/pdf'
+      : lower.endsWith('.png')
+        ? 'image/png'
+        : lower.endsWith('.jpg') || lower.endsWith('.jpeg')
+          ? 'image/jpeg'
+          : lower.endsWith('.html')
+            ? 'text/html; charset=utf-8'
+            : lower.endsWith('.md') || lower.endsWith('.txt') || lower.endsWith('.log')
+              ? 'text/plain; charset=utf-8'
+              : lower.endsWith('.json')
+                ? 'application/json'
+                : lower.endsWith('.csv')
+                  ? 'text/csv; charset=utf-8'
+                  : 'application/octet-stream';
+    c.header('Content-Type', ctype);
+    c.header('Content-Disposition', `inline; filename="${rawPath.split('/').pop() ?? 'file'}"`);
+    return c.body(body);
+  } catch (err) {
+    return c.json({ error: 'file not found', detail: (err as Error).message }, 404);
+  }
 });
 
 // ---------- Dev helpers ----------

@@ -6,6 +6,8 @@ import { sql } from '../db/client.js';
 import { config } from '../config.js';
 import { createSandbox, type SandboxHandle } from '../claude/docker-driver.js';
 import type { ToolProfile } from '@cc-hub/shared';
+import { getMcpForProfile, buildMcpJson, collectMcpEnv } from './mcp.js';
+import { packEntriesToTar } from '../ingest/tar-packer.js';
 
 export interface ActiveSession {
   sessionId: string;
@@ -53,6 +55,8 @@ export async function createSession(input: CreateSessionInput): Promise<ActiveSe
   }
   const sessionId = randomUUID();
 
+  const mcp = await getMcpForProfile(input.profile.id);
+
   const sandbox = await createSandbox({
     sessionId,
     profileId: input.profile.id,
@@ -63,7 +67,55 @@ export async function createSession(input: CreateSessionInput): Promise<ActiveSe
     memoryMb: 4096,
     cpuCount: 2,
     diskSizeMb: 10_240,
+    extraEnv: collectMcpEnv(mcp),
   });
+
+  // Inject .mcp.json + .claude/settings.local.json into workspace
+  const settings = {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: '.*',
+          hooks: [
+            {
+              type: 'command',
+              command: 'node /usr/local/lib/cc-hub-hook.mjs pre-tool-use',
+              timeout: 10,
+            },
+          ],
+        },
+      ],
+      PostToolUse: [
+        {
+          matcher: '.*',
+          hooks: [
+            {
+              type: 'command',
+              command: 'node /usr/local/lib/cc-hub-hook.mjs post-tool-use',
+              timeout: 10,
+            },
+          ],
+        },
+      ],
+      UserPromptSubmit: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: 'node /usr/local/lib/cc-hub-hook.mjs user-prompt-submit',
+              timeout: 10,
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const entries: Array<{ name: string; content: Buffer }> = [
+    { name: '.mcp.json', content: Buffer.from(buildMcpJson(mcp)) },
+    { name: '.claude/settings.local.json', content: Buffer.from(JSON.stringify(settings, null, 2)) },
+  ];
+  const tar = await packEntriesToTar(entries);
+  await sandbox.cpToWorkspace(tar);
 
   await sql`
     INSERT INTO sessions (id, task_id, user_id, workspace_path)
