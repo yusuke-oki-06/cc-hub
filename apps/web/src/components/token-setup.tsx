@@ -5,8 +5,11 @@ import { Button } from '@/components/ui/button';
 
 export function TokenSetup() {
   const [token, setToken] = useState('');
+  // open === null means "still reading localStorage"; we render nothing until
+  // hydration settles to avoid the yellow form flashing for users who already
+  // have a token saved.
+  const [open, setOpen] = useState<boolean | null>(null);
   const [saved, setSaved] = useState(false);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const t = window.localStorage.getItem('cc-hub-token') ?? '';
@@ -14,6 +17,8 @@ export function TokenSetup() {
     setSaved(t.length > 0);
     setOpen(t.length === 0);
   }, []);
+
+  if (open === null) return null;
 
   if (!open && saved) {
     return (

@@ -243,18 +243,41 @@ app.post('/api/sessions/:id/git-clone', async (c) => {
 // ---------- Start / continue claude turns ----------
 // 1 ターン = 1 `claude -p <prompt>` exec。初回以降は --resume で context 維持。
 // container は session 生存中は維持 (onExit で destroy しない)。
+const ModelSchema = z.enum(['opus', 'sonnet', 'haiku']).optional();
+const PermModeSchema = z.enum(['default', 'plan', 'acceptEdits']).optional();
+
 const StartClaudeSchema = z.object({
   prompt: z.string().min(1).optional(),
   allowedTools: z.array(z.string()).optional(),
   disallowedTools: z.array(z.string()).optional(),
+  model: ModelSchema,
+  permissionMode: PermModeSchema,
 });
-const PromptSchema = z.object({ text: z.string().min(1) });
+const PromptSchema = z.object({
+  text: z.string().min(1),
+  model: ModelSchema,
+  permissionMode: PermModeSchema,
+  allowedTools: z.array(z.string()).optional(),
+});
+
+interface TurnOverrides {
+  model?: 'opus' | 'sonnet' | 'haiku';
+  permissionMode?: 'default' | 'plan' | 'acceptEdits';
+  allowedTools?: string[];
+}
 
 async function runTurn(
   session: ActiveSession,
-  opts: { prompt: string; isFirstTurn: boolean },
+  opts: { prompt: string; isFirstTurn: boolean; overrides?: TurnOverrides },
 ): Promise<void> {
   const profile = await getProfile(session.profileId);
+  const ov = opts.overrides ?? {};
+
+  // allowedTools: override only narrows within profile's allow set (cannot
+  // escalate beyond profile). Intersection preserves guardrail contract.
+  const allowedTools = ov.allowedTools
+    ? ov.allowedTools.filter((t) => profile.allowedTools.includes(t))
+    : profile.allowedTools;
 
   await publishEvent({
     sessionId: session.sessionId,
@@ -263,17 +286,21 @@ async function runTurn(
       role: 'user',
       text: opts.prompt,
       claudeSessionId: session.claudeSessionId ?? null,
+      model: ov.model ?? null,
+      permissionMode: ov.permissionMode ?? 'default',
     },
   });
 
   touchSession(session.sessionId);
   const exec = await session.sandbox.execClaude({
     prompt: opts.prompt,
-    allowedTools: profile.allowedTools,
+    allowedTools,
     disallowedTools: profile.disallowedTools,
     resumeSessionId: opts.isFirstTurn ? undefined : session.claudeSessionId,
     maxTurns: profile.maxTurns,
     timeLimitSeconds: profile.timeLimitSeconds,
+    model: ov.model,
+    permissionMode: ov.permissionMode,
   });
   session.claudeExec = exec;
   await setTaskStatus(session.taskId, 'running');
@@ -292,6 +319,22 @@ async function runTurn(
     profileId: profile.id,
     prompt: opts.prompt,
   });
+
+  // Emit a standalone system.init event carrying the Langfuse trace URL so
+  // the UI can surface "詳細トレース (Langfuse)" link without waiting for a
+  // tool_use / assistant.message to arrive.
+  const traceUrl = langfuseDeepLink(traceCtx.traceId);
+  if (traceUrl) {
+    await publishEvent({
+      sessionId: session.sessionId,
+      eventType: 'system.init',
+      payload: {
+        kind: 'langfuse-trace',
+        traceId: traceCtx.traceId,
+        langfuseTraceUrl: traceUrl,
+      },
+    });
+  }
 
   exec.onEvent(async (event) => {
     try {
@@ -384,7 +427,15 @@ app.post('/api/sessions/:id/claude/start', async (c) => {
     task?.prompt ??
     'Inspect the /workspace directory and describe what you find.';
 
-  await runTurn(session, { prompt, isFirstTurn: true });
+  await runTurn(session, {
+    prompt,
+    isFirstTurn: true,
+    overrides: {
+      model: parsed.data.model,
+      permissionMode: parsed.data.permissionMode,
+      allowedTools: parsed.data.allowedTools,
+    },
+  });
   return c.json({ ok: true });
 });
 
@@ -405,10 +456,24 @@ app.post('/api/sessions/:id/claude/prompt', async (c) => {
     sessionId,
     taskId: session.taskId,
     kind: 'prompt',
-    payload: { role: 'user', text: parsed.data.text, followUp: true },
+    payload: {
+      role: 'user',
+      text: parsed.data.text,
+      followUp: true,
+      model: parsed.data.model ?? null,
+      permissionMode: parsed.data.permissionMode ?? 'default',
+    },
   });
 
-  await runTurn(session, { prompt: parsed.data.text, isFirstTurn: false });
+  await runTurn(session, {
+    prompt: parsed.data.text,
+    isFirstTurn: false,
+    overrides: {
+      model: parsed.data.model,
+      permissionMode: parsed.data.permissionMode,
+      allowedTools: parsed.data.allowedTools,
+    },
+  });
   return c.json({ ok: true });
 });
 
@@ -616,6 +681,54 @@ app.get('/api/sessions/active', async (c) => {
 app.get('/api/admin/usage-summary', async (c) => {
   const { getUsageSummary } = await import('./services/usage-summary.js');
   return c.json(await getUsageSummary());
+});
+
+// ---------- Admin: latest Langfuse traces (proxied) ----------
+app.get('/api/admin/traces', async (c) => {
+  const host = process.env.LANGFUSE_HOST ?? 'http://localhost:3100';
+  const pk = process.env.LANGFUSE_PUBLIC_KEY;
+  const sk = process.env.LANGFUSE_SECRET_KEY;
+  if (!pk || !sk) return c.json({ traces: [], error: 'LANGFUSE credentials not set' });
+  const auth = 'Basic ' + Buffer.from(`${pk}:${sk}`).toString('base64');
+  const limit = Number(c.req.query('limit') ?? 25);
+  try {
+    const r = await fetch(`${host.replace(/\/$/, '')}/api/public/traces?limit=${limit}`, {
+      headers: { Authorization: auth },
+    });
+    if (!r.ok) return c.json({ traces: [], error: `langfuse ${r.status}` }, 502);
+    const body = (await r.json()) as {
+      data?: Array<{
+        id: string;
+        name?: string;
+        userId?: string;
+        sessionId?: string;
+        timestamp?: string;
+        latency?: number;
+        totalCost?: number;
+      }>;
+    };
+    const traces = (body.data ?? []).map((t) => ({
+      id: t.id,
+      name: t.name ?? '',
+      userId: t.userId ?? '',
+      sessionId: t.sessionId ?? '',
+      timestamp: t.timestamp ?? '',
+      latencySec: typeof t.latency === 'number' ? t.latency : null,
+      costUsd: typeof t.totalCost === 'number' ? t.totalCost : null,
+      url: langfuseDeepLink(t.id),
+    }));
+    return c.json({ traces });
+  } catch (err) {
+    return c.json({ traces: [], error: (err as Error).message }, 502);
+  }
+});
+
+// Convenient getter for task view: most recent trace URL for a session
+app.get('/api/sessions/:id/trace-url', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = getActiveSession(sessionId);
+  if (!session) return c.json({ traceUrl: null }, 200);
+  return c.json({ traceUrl: langfuseDeepLink(sessionId) });
 });
 
 // ---------- Skills (marketplace) ----------

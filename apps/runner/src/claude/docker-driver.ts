@@ -36,6 +36,10 @@ export interface ClaudeExecInput {
   resumeSessionId?: string;
   maxTurns: number;
   timeLimitSeconds: number;
+  /** Short model alias (opus/sonnet/haiku) or full Anthropic model ID. */
+  model?: string;
+  /** Claude CLI permission mode. 'bypassPermissions' is intentionally unsupported here. */
+  permissionMode?: 'default' | 'plan' | 'acceptEdits';
 }
 
 export interface ClaudeExecHandle {
@@ -144,6 +148,10 @@ async function startClaudeExec(
   if (input.disallowedTools.length > 0)
     args.push('--disallowedTools', input.disallowedTools.join(' '));
   if (input.resumeSessionId) args.push('--resume', input.resumeSessionId);
+  if (input.model) args.push('--model', input.model);
+  if (input.permissionMode && input.permissionMode !== 'default') {
+    args.push('--permission-mode', input.permissionMode);
+  }
 
   const exec = await container.exec({
     Cmd: ['claude', ...args],

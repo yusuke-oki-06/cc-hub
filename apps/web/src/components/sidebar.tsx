@@ -55,11 +55,11 @@ export function Sidebar() {
 
   if (collapsed) {
     return (
-      <aside className="sticky top-0 flex h-screen w-[56px] shrink-0 flex-col items-center gap-2 border-r border-border-cream bg-ivory py-4">
+      <aside className="sticky top-0 flex h-screen w-[56px] shrink-0 flex-col items-center gap-2 border-r border-ring-warm bg-sand py-4">
         <button
           aria-label="サイドバーを開く"
           onClick={() => setCollapsed(false)}
-          className="rounded-card p-2 text-charcoal hover:bg-sand"
+          className="rounded-card p-2 text-charcoal hover:bg-ivory"
         >
           <IconMenu />
         </button>
@@ -75,7 +75,7 @@ export function Sidebar() {
           href="/workspace"
           className={cn(
             'rounded-card p-2',
-            isActive('/workspace') ? 'bg-sand text-near' : 'text-charcoal hover:bg-sand',
+            isActive('/workspace') ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : 'text-charcoal hover:bg-ivory',
           )}
           title="ワークスペース"
         >
@@ -85,7 +85,7 @@ export function Sidebar() {
           href="/projects"
           className={cn(
             'rounded-card p-2',
-            isActive('/projects') ? 'bg-sand text-near' : 'text-charcoal hover:bg-sand',
+            isActive('/projects') ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : 'text-charcoal hover:bg-ivory',
           )}
           title="プロジェクト"
         >
@@ -95,7 +95,7 @@ export function Sidebar() {
           href="/skills"
           className={cn(
             'rounded-card p-2',
-            isActive('/skills') ? 'bg-sand text-near' : 'text-charcoal hover:bg-sand',
+            isActive('/skills') ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : 'text-charcoal hover:bg-ivory',
           )}
           title="Skills"
         >
@@ -106,7 +106,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="sticky top-0 flex h-screen w-[260px] shrink-0 flex-col border-r border-border-cream bg-ivory">
+    <aside className="sticky top-0 flex h-screen w-[260px] shrink-0 flex-col border-r border-ring-warm bg-sand">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4">
         <Link href="/" className="flex items-center gap-2">
@@ -118,7 +118,7 @@ export function Sidebar() {
         <button
           aria-label="サイドバーを閉じる"
           onClick={() => setCollapsed(true)}
-          className="rounded-card p-1.5 text-stone hover:bg-sand hover:text-charcoal"
+          className="rounded-card p-1.5 text-stone hover:bg-ivory hover:text-charcoal"
         >
           <IconMenu />
         </button>
@@ -147,8 +147,8 @@ export function Sidebar() {
                 <Link
                   href={`/projects/${p.id}`}
                   className={cn(
-                    'flex items-center justify-between rounded-card px-2 py-1.5 font-sans text-[13px] text-charcoal hover:bg-sand',
-                    isActive(`/projects/${p.id}`) ? 'bg-sand text-near' : '',
+                    'flex items-center justify-between rounded-card px-2 py-1.5 font-sans text-[13px] text-charcoal hover:bg-ivory',
+                    isActive(`/projects/${p.id}`) ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : '',
                   )}
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
@@ -170,8 +170,8 @@ export function Sidebar() {
                 <Link
                   href={`/tasks/${t.id}`}
                   className={cn(
-                    'flex min-w-0 items-start gap-2 rounded-card px-2 py-1.5 font-sans text-[12.5px] leading-[1.35] text-charcoal hover:bg-sand',
-                    isActive(`/tasks/${t.id}`) ? 'bg-sand text-near' : '',
+                    'flex min-w-0 items-start gap-2 rounded-card px-2 py-1.5 font-sans text-[12.5px] leading-[1.35] text-charcoal hover:bg-ivory',
+                    isActive(`/tasks/${t.id}`) ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : '',
                   )}
                 >
                   <StatusDot status={t.status} />
@@ -198,7 +198,7 @@ export function Sidebar() {
       </div>
 
       {/* Footer: budget */}
-      <div className="border-t border-border-cream px-4 py-3">
+      <div className="border-t border-ring-warm px-4 py-3">
         {budget ? (
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between font-sans text-[11px] text-stone">
@@ -207,7 +207,7 @@ export function Sidebar() {
                 ${budget.dailyUsedUsd.toFixed(3)} / ${budget.dailyCapUsd.toFixed(0)}
               </span>
             </div>
-            <div className="h-[4px] overflow-hidden rounded-full bg-sand">
+            <div className="h-[4px] overflow-hidden rounded-full bg-[#d1cfc5]">
               <div
                 className="h-full rounded-full bg-terracotta"
                 style={{
@@ -270,8 +270,8 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        'flex items-center gap-2 rounded-card px-2 py-1.5 font-sans text-[13px] text-charcoal hover:bg-sand',
-        active ? 'bg-sand text-near' : '',
+        'flex items-center gap-2 rounded-card px-2 py-1.5 font-sans text-[13px] text-charcoal hover:bg-ivory',
+        active ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : '',
       )}
     >
       <span className="text-stone">{icon}</span>
