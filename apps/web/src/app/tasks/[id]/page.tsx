@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +19,9 @@ interface Task {
   sessionId: string | null;
 }
 
-export default function TaskView({ params }: { params: { id: string } }) {
+export default function TaskView() {
+  const params = useParams<{ id: string }>();
+  const taskId = params?.id ?? '';
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<SseEvent[]>([]);
   const [connected, setConnected] = useState(false);
@@ -26,10 +29,13 @@ export default function TaskView({ params }: { params: { id: string } }) {
   const sessionId = task?.sessionId ?? null;
 
   useEffect(() => {
+    if (!taskId) return;
+    let cancelled = false;
     const loop = async () => {
-      while (true) {
+      while (!cancelled) {
         try {
-          const t = await api<Task>(`/api/tasks/${params.id}`);
+          const t = await api<Task>(`/api/tasks/${taskId}`);
+          if (cancelled) return;
           setTask(t);
           if (t.sessionId) break;
         } catch {
@@ -39,7 +45,10 @@ export default function TaskView({ params }: { params: { id: string } }) {
       }
     };
     void loop();
-  }, [params.id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -84,7 +93,7 @@ export default function TaskView({ params }: { params: { id: string } }) {
           <div className="flex items-center gap-2">
             {task && <Badge tone={statusTone(task.status)}>{task.status}</Badge>}
             <span className="font-mono text-[12px] text-stone">
-              task {params.id.slice(0, 8)}
+              task {taskId.slice(0, 8)}
             </span>
             <span className="font-mono text-[12px] text-stone">
               · session {sessionId?.slice(0, 8) ?? '…'}

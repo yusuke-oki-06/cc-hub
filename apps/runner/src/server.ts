@@ -16,7 +16,14 @@ import {
 } from './services/sessions.js';
 import { getProfile, listProfiles, upsertProfile, CreateProfileSchema } from './services/profiles.js';
 import { assertBudgetOk, getBudgetState, addUsage } from './services/budgets.js';
-import { createTask, getTask, listTasks, setTaskStatus, addTaskCost } from './services/tasks.js';
+import {
+  createTask,
+  getTask,
+  getLatestSessionForTask,
+  listTasks,
+  setTaskStatus,
+  addTaskCost,
+} from './services/tasks.js';
 import { writeAudit, listAudit } from './services/audit.js';
 import {
   listMcpIntegrations,
@@ -77,9 +84,12 @@ app.get('/api/me/budget', async (c) => {
 // ---------- Tasks ----------
 app.get('/api/tasks', async (c) => c.json({ tasks: await listTasks(c.get('userId')) }));
 app.get('/api/tasks/:id', async (c) => {
-  const t = await getTask(c.req.param('id'), c.get('userId'));
+  const userId = c.get('userId');
+  const taskId = c.req.param('id');
+  const t = await getTask(taskId, userId);
   if (!t) return c.json({ error: 'not found' }, 404);
-  return c.json(t);
+  const sessionId = await getLatestSessionForTask(taskId, userId);
+  return c.json({ ...t, sessionId });
 });
 
 // ---------- Session creation (core) ----------
