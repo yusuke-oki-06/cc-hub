@@ -470,7 +470,11 @@ app.post('/api/sessions/:id/claude/start', async (c) => {
     return c.json({ ok: true });
   } catch (err) {
     await failSession(session, 'start', err);
-    return c.json({ error: (err as Error).message ?? 'start failed' }, 500);
+    // Do not leak raw error text to the caller — it may contain internal
+    // hostnames, file paths, or credential fragments from docker / DB layers.
+    // The full message is preserved server-side (console.error) and in the
+    // SSE `error` event (which already runs through publishEvent's redactor).
+    return c.json({ error: 'claude start failed' }, 500);
   }
 });
 
@@ -513,7 +517,7 @@ app.post('/api/sessions/:id/claude/prompt', async (c) => {
     return c.json({ ok: true });
   } catch (err) {
     await failSession(session, 'prompt', err);
-    return c.json({ error: (err as Error).message ?? 'prompt failed' }, 500);
+    return c.json({ error: 'claude prompt failed' }, 500);
   }
 });
 

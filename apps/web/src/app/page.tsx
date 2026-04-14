@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { api, runnerBase, getAuthHeader } from '@/lib/api';
+import { api, runnerBase, getAuthHeader, withTimeout } from '@/lib/api';
 import { TokenSetup } from '@/components/token-setup';
 import type { ToolProfile } from '@cc-hub/shared';
 
@@ -99,10 +99,16 @@ export default function Home() {
       }
 
       setPhase('starting');
-      await api(`/api/sessions/${created.sessionId}/claude/start`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
+      // Cap claude/start wait at 120s so a stuck sandbox doesn't leave the
+      // submit button disabled indefinitely with no way for the user to react.
+      await withTimeout(
+        api(`/api/sessions/${created.sessionId}/claude/start`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        }),
+        120_000,
+        'Claude 起動',
+      );
 
       setPhase('navigating');
       router.push(`/tasks/${created.taskId}`);

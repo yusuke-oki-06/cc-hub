@@ -26,3 +26,12 @@ export async function api<T>(
 
 export const runnerBase = BASE;
 export const getAuthHeader = () => `Bearer ${getToken()}`;
+
+/** Wrap a promise so it rejects after `ms` with a labelled timeout error. */
+export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    t = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([p.finally(() => t && clearTimeout(t)), timeout]);
+}

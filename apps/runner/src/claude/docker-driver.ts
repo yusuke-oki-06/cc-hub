@@ -194,10 +194,14 @@ async function startClaudeExec(
   // with an idempotent flag. If exec.inspect() rejects or returns null, we
   // fall back to code = -1 so downstream always sees a terminal state.
   let exited = false;
+  // Declared up-front so fireExit can safely clearTimeout even if the stream
+  // signals termination before the watchdog is scheduled (temporal-dead-zone
+  // safety).
+  let watchdog: ReturnType<typeof setTimeout> | undefined;
   async function fireExit(reason: string): Promise<void> {
     if (exited) return;
     exited = true;
-    clearTimeout(watchdog);
+    if (watchdog) clearTimeout(watchdog);
     for (const ev of parser.flush()) for (const cb of eventListeners) cb(ev);
     let code: number | null = null;
     try {
@@ -206,8 +210,6 @@ async function startClaudeExec(
     } catch {
       code = -1;
     }
-    // If docker reports still running (ExitCode null) and we got here via
-    // watchdog, mark as failure so UI does not hang on "running" forever.
     if (code === null && reason !== 'end') code = -1;
     for (const cb of exitListeners) cb(code);
   }
@@ -232,11 +234,7 @@ async function startClaudeExec(
   );
   timeLimit.unref();
 
-  // Hard watchdog: if neither 'end' nor 'close' fires within
-  // timeLimitSeconds + 30s, forcibly mark the exec as exited so the task
-  // escapes the "running" state. This covers dockerode edge cases where the
-  // multiplexed stream never signals termination.
-  const watchdog = setTimeout(
+  watchdog = setTimeout(
     () => {
       if (!exited) {
         console.error(
