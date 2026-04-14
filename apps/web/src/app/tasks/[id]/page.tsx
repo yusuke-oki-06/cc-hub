@@ -9,7 +9,10 @@ import { api } from '@/lib/api';
 import { subscribeSession } from '@/lib/sse';
 import { buildTimeline, type FriendlyItem } from '@/lib/render/friendly';
 import { PromptComposer, type ComposerSubmit } from '@/components/prompt-composer';
+import { TerminalStream } from '@/components/terminal-stream';
 import type { SseEvent, ToolProfile } from '@cc-hub/shared';
+
+type ViewMode = 'conversation' | 'terminal' | 'json';
 
 interface Task {
   id: string;
@@ -28,8 +31,9 @@ export default function TaskView() {
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<SseEvent[]>([]);
   const [connected, setConnected] = useState(false);
-  const [devMode, setDevMode] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('conversation');
   const [profile, setProfile] = useState<ToolProfile | undefined>();
+  const [retrying, setRetrying] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const sessionId = task?.sessionId ?? null;
   const timeline = useMemo(() => buildTimeline(events), [events]);
@@ -45,6 +49,17 @@ export default function TaskView() {
     () => events.filter((e) => e.type === 'saas_link'),
     [events],
   );
+  // T-1: surface start/prompt failures as a retry-able banner
+  const lastError = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i];
+      if (ev?.type === 'error') {
+        const p = ev.payload as { message?: string; scope?: string; raw?: unknown } | null;
+        if (p?.message) return { message: p.message, scope: p.scope ?? null };
+      }
+    }
+    return null;
+  }, [events]);
   const permissionOpen = useMemo(
     () =>
       events.filter(
@@ -111,6 +126,18 @@ export default function TaskView() {
     const handle = subscribeSession(sessionId, (ev) => {
       setConnected(true);
       setEvents((prev) => (prev.some((e) => e.seq === ev.seq) ? prev : [...prev, ev]));
+      // T-4: optimistic status update so ThinkingIndicator clears within
+      // SSE latency (<100ms) instead of waiting for the 3s poll.
+      if (ev.type === 'result' || ev.type === 'turn.ended') {
+        const code = (ev.payload as { exitCode?: number } | null)?.exitCode;
+        setTask((prev) =>
+          prev
+            ? { ...prev, status: code === 0 || code === undefined ? 'succeeded' : 'failed' }
+            : prev,
+        );
+      } else if (ev.type === 'error') {
+        setTask((prev) => (prev ? { ...prev, status: 'failed' } : prev));
+      }
     });
     return () => handle.close();
   }, [sessionId]);
@@ -161,14 +188,7 @@ export default function TaskView() {
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <label className="flex items-center gap-1.5 font-sans text-[12px] text-stone cursor-pointer">
-            <input
-              type="checkbox"
-              checked={devMode}
-              onChange={(e) => setDevMode(e.target.checked)}
-            />
-            developer
-          </label>
+          <ViewSegment value={viewMode} onChange={setViewMode} />
           {isRunning && (
             <Button variant="dark" size="sm" onClick={onAbort} disabled={!sessionId}>
               中断
@@ -177,29 +197,79 @@ export default function TaskView() {
         </div>
       </header>
 
+      {lastError && (
+        <Card className="border-[#e0a9a9] bg-[#fbeaea]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <div className="font-sans text-[13px] font-medium text-near">
+                実行エラー{lastError.scope ? ` (${lastError.scope})` : ''}
+              </div>
+              <div className="font-mono text-[12px] text-charcoal break-words">
+                {lastError.message}
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={!sessionId || retrying || isRunning}
+              onClick={async () => {
+                if (!sessionId) return;
+                setRetrying(true);
+                try {
+                  await api(`/api/sessions/${sessionId}/claude/start`, {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                  });
+                  setTask((prev) => (prev ? { ...prev, status: 'running' } : prev));
+                } catch (e) {
+                  console.error('[task] retry failed', e);
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+            >
+              {retrying ? '再実行中…' : '再実行'}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
         {/* Main column: timeline + composer */}
         <section className="space-y-4">
           <Card className="overflow-hidden">
             <CardHeader>
-              <CardTitle>会話</CardTitle>
+              <CardTitle>
+                {viewMode === 'conversation' ? '会話' : viewMode === 'terminal' ? 'ターミナル' : '生イベント (JSON)'}
+              </CardTitle>
               <span className="font-sans text-[12px] text-stone">
-                {timeline.length} messages{devMode ? ` / ${events.length} raw events` : ''}
+                {viewMode === 'conversation'
+                  ? `${timeline.length} messages`
+                  : `${events.length} events`}
               </span>
             </CardHeader>
-            <div ref={listRef} className="max-h-[56vh] overflow-y-auto space-y-3 pr-1">
-              {devMode
-                ? events.map((ev) => <RawEventRow key={ev.seq} ev={ev} />)
-                : timeline.map((it) => (
-                    <FriendlyRow key={it.seq} item={it} sessionId={sessionId} />
-                  ))}
-              {!devMode && <ThinkingIndicator timeline={timeline} isRunning={isRunning} />}
-              {timeline.length === 0 && !devMode && !isRunning && !sessionId && (
-                <div className="py-10 text-center font-sans text-[13px] text-stone">
-                  セッションを準備中…
-                </div>
-              )}
-            </div>
+            {viewMode === 'terminal' ? (
+              <TerminalStream events={events} />
+            ) : (
+              <div ref={listRef} className="max-h-[56vh] overflow-y-auto space-y-3 pr-1">
+                {viewMode === 'json'
+                  ? events.map((ev) => <RawEventRow key={ev.seq} ev={ev} />)
+                  : timeline.map((it) => (
+                      <FriendlyRow key={it.seq} item={it} sessionId={sessionId} />
+                    ))}
+                {viewMode === 'conversation' && (
+                  <ThinkingIndicator timeline={timeline} isRunning={isRunning} />
+                )}
+                {timeline.length === 0 &&
+                  viewMode === 'conversation' &&
+                  !isRunning &&
+                  !sessionId && (
+                    <div className="py-10 text-center font-sans text-[13px] text-stone">
+                      セッションを準備中…
+                    </div>
+                  )}
+              </div>
+            )}
           </Card>
 
           {/* Composer */}
@@ -284,6 +354,38 @@ export default function TaskView() {
           </Card>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function ViewSegment({
+  value,
+  onChange,
+}: {
+  value: ViewMode;
+  onChange: (v: ViewMode) => void;
+}) {
+  const opts: Array<{ v: ViewMode; label: string; hint: string }> = [
+    { v: 'conversation', label: '会話', hint: '非エンジニア向け要約' },
+    { v: 'terminal', label: 'ターミナル', hint: 'CLI 相当の全イベント' },
+    { v: 'json', label: 'JSON', hint: '開発者向け raw dump' },
+  ];
+  return (
+    <div className="inline-flex overflow-hidden rounded-card border border-border-warm bg-white">
+      {opts.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          title={o.hint}
+          onClick={() => onChange(o.v)}
+          className={
+            'px-2.5 py-1 font-sans text-[12px] transition ' +
+            (value === o.v ? 'bg-sand text-near' : 'text-stone hover:bg-parchment')
+          }
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }

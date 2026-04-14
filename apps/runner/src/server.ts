@@ -824,7 +824,7 @@ function mapClaudeEventType(t: string): never {
     ['tool_result', 'tool_result'],
     ['result', 'result'],
     ['system', 'system.init'],
-    ['runner.stderr', 'error'],
+    ['runner.stderr', 'runner.stderr'],
     ['runner.error', 'error'],
     ['runner.aborted', 'error'],
     ['runner.parse_error', 'error'],

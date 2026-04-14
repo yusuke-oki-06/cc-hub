@@ -12,6 +12,7 @@ export const SseEventTypeSchema = z.enum([
   'ask_user_answered',
   'result',
   'error',
+  'runner.stderr',
   'guardrail.blocked',
   'budget.exceeded',
   'saas_link',
