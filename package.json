@@ -1,0 +1,32 @@
+{
+  "name": "cc-hub",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Claude Code 社内配布プラットフォーム (Phase 1 PoC)",
+  "packageManager": "pnpm@9.12.2",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "web:dev": "pnpm --filter @cc-hub/web dev",
+    "web:build": "pnpm --filter @cc-hub/web build",
+    "runner:dev": "pnpm --filter @cc-hub/runner dev",
+    "runner:build": "pnpm --filter @cc-hub/runner build",
+    "guardrails:test": "pnpm --filter @cc-hub/guardrails test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:up": "docker compose -f infra/runner-db/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/runner-db/docker-compose.yml down",
+    "langfuse:up": "docker compose -f infra/langfuse/docker-compose.yml up -d",
+    "langfuse:down": "docker compose -f infra/langfuse/docker-compose.yml down",
+    "migrate": "pnpm --filter @cc-hub/runner migrate"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^20.17.6",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.2"
+  }
+}
