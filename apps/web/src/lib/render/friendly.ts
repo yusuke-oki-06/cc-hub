@@ -147,8 +147,10 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
         seq: ev.seq,
         kind: ok ? 'result.success' : 'hidden',
         title: '完了しました',
-        // body は渡さない — 直前の assistant メッセージで同じテキストが既に
-        // 表示されているため、結果行では "完了しました" のラベルだけで十分。
+        // body は保持するが、buildTimeline 側で「直前の assistant と同じ
+        // テキスト」だと判定できた場合に落とす。これにより assistant が
+        // ストリームされないエッジケースで要約テキストが失われない。
+        body: typeof text === 'string' ? text : undefined,
         meta: time,
       };
     }
@@ -293,7 +295,20 @@ export function buildTimeline(events: SseEvent[]): FriendlyItem[] {
       merged.push(it);
     }
   }
-  return merged.filter((i) => i.kind !== 'hidden');
+  const filtered = merged.filter((i) => i.kind !== 'hidden');
+
+  // result.success の body が直前の assistant と同じテキストなら隠す
+  // (UI 上で同じ文字列が続けて 2 回表示されるのを防ぐ)。
+  for (let i = 0; i < filtered.length; i++) {
+    const cur = filtered[i];
+    if (cur?.kind !== 'result.success' || !cur.body) continue;
+    const prev = filtered[i - 1];
+    if (prev?.kind === 'assistant' && typeof prev.body === 'string' && prev.body.trim() === cur.body.trim()) {
+      cur.body = undefined;
+    }
+  }
+
+  return filtered;
 }
 
 function summarizeToolCall(name: string, input: Record<string, unknown>): string {
