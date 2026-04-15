@@ -96,6 +96,7 @@ export async function listSkills(filter?: {
   orderBy?: 'popular' | 'recent' | 'favorites';
   userId?: string;
   favoritedBy?: string; // user id — restrict to their favorites only
+  search?: string; // case-insensitive match against slug/title/description
 }): Promise<SkillRow[]> {
   const orderSql =
     filter?.orderBy === 'popular'
@@ -123,6 +124,15 @@ export async function listSkills(filter?: {
     ? sql`AND EXISTS (SELECT 1 FROM skill_favorites sfF
                        WHERE sfF.skill_id = s.id AND sfF.user_id = ${filter.favoritedBy}::uuid)`
     : sql``;
+  // Text search across slug, title, description. Use ILIKE with the caller's
+  // raw pattern wrapped in % — postgres.js parametrizes, so SQL injection
+  // is not a concern, but trim first to avoid "% %" matching everything.
+  const q = filter?.search?.trim();
+  const searchFilter = q
+    ? sql`AND (s.slug ILIKE ${'%' + q + '%'}
+           OR s.title ILIKE ${'%' + q + '%'}
+           OR COALESCE(s.description, '') ILIKE ${'%' + q + '%'})`
+    : sql``;
 
   return sql<SkillRow[]>`
     SELECT
@@ -144,6 +154,7 @@ export async function listSkills(filter?: {
       ${statusFilter}
       ${categoryFilter}
       ${favFilter}
+      ${searchFilter}
     ${orderSql}
     LIMIT 100
   `;

@@ -858,6 +858,7 @@ app.get('/api/skills', async (c) => {
     orderByRaw === 'popular' || orderByRaw === 'favorites' ? orderByRaw : 'recent';
   const userId = c.get('userId');
   const onlyMine = c.req.query('favoritedByMe') === 'true';
+  const search = c.req.query('search') || undefined;
   return c.json({
     skills: await listSkills({
       status,
@@ -865,6 +866,7 @@ app.get('/api/skills', async (c) => {
       orderBy,
       userId,
       favoritedBy: onlyMine ? userId : undefined,
+      search,
     }),
   });
 });
