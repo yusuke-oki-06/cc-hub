@@ -248,60 +248,58 @@ export default function SkillsPage() {
       {/* Skill list */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {skills.map((s) => (
-          <div key={s.id} className="relative">
-            <Link href={`/skills/${s.id}`}>
-              <Card className="hover:shadow-ring transition cursor-pointer">
-                <CardHeader>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <CardTitle>{s.title}</CardTitle>
-                    {s.authorId === OFFICIAL_AUTHOR_ID && <OfficialBadge />}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge tone="default">{categoryMeta(s.category).label}</Badge>
-                    <Badge tone={statusTone(s.status)}>{s.status}</Badge>
-                  </div>
-                </CardHeader>
-                <p className="font-sans text-[13px] text-olive">{s.description ?? '—'}</p>
-                <div className="mt-2 flex items-center justify-between gap-3 font-mono text-[11px] text-stone">
-                  <span className="truncate">
-                    {s.slug} · v{s.version} · インストール{' '}
-                    <span className="tabular-nums">{s.installCount}</span> 件 · ★{' '}
-                    <span className="tabular-nums">{s.favoriteCount}</span>
-                  </span>
-                  {s.status === 'published' && (
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void install(s.id);
-                      }}
-                      className="shrink-0 rounded-card bg-terracotta px-3 py-1 font-sans text-[12px] text-ivory hover:bg-[#b5573a]"
-                    >
-                      install
-                    </button>
-                  )}
+          <Link key={s.id} href={`/skills/${s.id}`}>
+            <Card className="hover:shadow-ring transition cursor-pointer">
+              <CardHeader>
+                <div className="flex min-w-0 items-center gap-2">
+                  <CardTitle>{s.title}</CardTitle>
+                  {s.authorId === OFFICIAL_AUTHOR_ID && <OfficialBadge />}
                 </div>
-              </Card>
-            </Link>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                void toggleFavorite(s.id);
-              }}
-              aria-label={s.favoritedByMe ? 'お気に入り解除' : 'お気に入りに追加'}
-              title={s.favoritedByMe ? 'お気に入り解除' : 'お気に入りに追加'}
-              className={
-                'absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full transition ' +
-                (s.favoritedByMe
-                  ? 'bg-[#fff7d1] text-[#d4a017] hover:bg-[#fceba5]'
-                  : 'bg-white text-stone hover:bg-sand')
-              }
-            >
-              <StarIcon filled={!!s.favoritedByMe} />
-            </button>
-          </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge tone="default">{categoryMeta(s.category).label}</Badge>
+                  <Badge tone={statusTone(s.status)}>{s.status}</Badge>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void toggleFavorite(s.id);
+                    }}
+                    aria-label={s.favoritedByMe ? 'お気に入り解除' : 'お気に入りに追加'}
+                    title={s.favoritedByMe ? 'お気に入り解除' : 'お気に入りに追加'}
+                    className={
+                      'inline-flex h-6 w-6 items-center justify-center rounded-full transition ' +
+                      (s.favoritedByMe
+                        ? 'text-[#d4a017] hover:bg-[#fceba5]'
+                        : 'text-stone hover:bg-sand hover:text-[#d4a017]')
+                    }
+                  >
+                    <StarIcon filled={!!s.favoritedByMe} />
+                  </button>
+                </div>
+              </CardHeader>
+              <p className="font-sans text-[13px] text-olive">{s.description ?? '—'}</p>
+              <div className="mt-2 flex items-center justify-between gap-3 font-mono text-[11px] text-stone">
+                <span className="truncate">
+                  {s.slug} · v{s.version} · インストール{' '}
+                  <span className="tabular-nums">{s.installCount}</span> 件 · ★{' '}
+                  <span className="tabular-nums">{s.favoriteCount}</span>
+                </span>
+                {s.status === 'published' && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void install(s.id);
+                    }}
+                    className="shrink-0 rounded-card bg-terracotta px-3 py-1 font-sans text-[12px] text-ivory hover:bg-[#b5573a]"
+                  >
+                    install
+                  </button>
+                )}
+              </div>
+            </Card>
+          </Link>
         ))}
         {skills.length === 0 && (
           <Card>
