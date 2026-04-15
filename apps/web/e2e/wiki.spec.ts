@@ -22,6 +22,15 @@ test.describe('Wiki UI', () => {
     await expect(page.getByRole('button', { name: /^リーディング$/ })).toBeVisible();
   });
 
+  test('help panel + composer preset buttons are present', async ({ authedPage: page }) => {
+    await page.goto('/wiki');
+    await expect(page.getByText(/Wiki の使い方/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByPlaceholder(/Wiki に依頼/)).toBeVisible();
+    for (const label of ['初期化', 'raw を取り込む', '質問する', 'lint']) {
+      await expect(page.getByRole('button', { name: label })).toBeVisible();
+    }
+  });
+
   test('sidebar has Wiki nav entry', async ({ authedPage: page }) => {
     await page.goto('/');
     const wikiLink = page.getByRole('link', { name: /^Wiki$/ });

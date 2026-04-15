@@ -6,6 +6,8 @@ import { api } from '@/lib/api';
 import { WikiGraph, type GraphNode, type GraphLink } from '@/components/wiki-graph';
 import { WikiMarkdown } from '@/components/wiki-markdown';
 import { WikiTree, type TreeEntry } from '@/components/wiki-tree';
+import { WikiHelp } from '@/components/wiki-help';
+import { WikiComposer } from '@/components/wiki-composer';
 
 type ViewMode = 'graph' | 'reading';
 
@@ -145,6 +147,10 @@ CC_HUB_VAULT_PATH=C:\Users\koori\Documents\ObsidianVault
           <div className="font-sans text-[13px] text-error-crimson">エラー: {error}</div>
         </Card>
       )}
+
+      <WikiHelp />
+
+      <WikiComposer />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr]">
         <aside className="rounded-card border border-border-cream bg-ivory">
