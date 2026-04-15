@@ -1,4 +1,4 @@
-# CC Hub — Claude Code 社内配布プラットフォーム
+# CC Hub — Claude Code HUB
 
 **Status**: Phase 1 (一人 PoC / localhost only / trusted repo only)
 
