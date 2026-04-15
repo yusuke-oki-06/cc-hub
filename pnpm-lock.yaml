@@ -108,12 +108,18 @@ importers:
       react-force-graph-2d:
         specifier: ^1.29.1
         version: 1.29.1(react@19.0.0-rc-66855b96-20241106)
+      react-icons:
+        specifier: ^5.6.0
+        version: 5.6.0(react@19.0.0-rc-66855b96-20241106)
       react-markdown:
         specifier: ^10.1.0
         version: 10.1.0(@types/react@18.3.28)(react@19.0.0-rc-66855b96-20241106)
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
+      simple-icons:
+        specifier: ^16.16.0
+        version: 16.16.0
       tailwind-merge:
         specifier: ^2.5.4
         version: 2.6.1
@@ -1899,6 +1905,11 @@ packages:
     peerDependencies:
       react: '*'
 
+  react-icons@5.6.0:
+    resolution: {integrity: sha512-RH93p5ki6LfOiIt0UtDyNg/cee+HLVR6cHHtW3wALfo+eOHTp8RnU2kRkI6E+H19zMIs03DyxUG/GfZMOGvmiA==}
+    peerDependencies:
+      react: '*'
+
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
 
@@ -1989,6 +2000,10 @@ packages:
 
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
+
+  simple-icons@16.16.0:
+    resolution: {integrity: sha512-H+Z29a0TrCw6mrG42V2aqHQaKdJCT87x5aojLlPiIXOf1lpMqnKFAR/jP5xkI5hLrVTCBWs33e9sOtyNWqCx1A==}
+    engines: {node: '>=0.12.18'}
 
   simple-swizzle@0.2.4:
     resolution: {integrity: sha512-nAu1WFPQSMNr2Zn9PGSZK9AGn4t/y97lEm+MXTtUDwfP0ksAIX4nO+6ruD9Jwut4C49SB1Ws+fbXsm/yScWOHw==}
@@ -3984,6 +3999,10 @@ snapshots:
       react: 19.0.0-rc-66855b96-20241106
       react-kapsule: 2.5.7(react@19.0.0-rc-66855b96-20241106)
 
+  react-icons@5.6.0(react@19.0.0-rc-66855b96-20241106):
+    dependencies:
+      react: 19.0.0-rc-66855b96-20241106
+
   react-is@16.13.1: {}
 
   react-kapsule@2.5.7(react@19.0.0-rc-66855b96-20241106):
@@ -4149,6 +4168,8 @@ snapshots:
     optional: true
 
   siginfo@2.0.0: {}
+
+  simple-icons@16.16.0: {}
 
   simple-swizzle@0.2.4:
     dependencies:

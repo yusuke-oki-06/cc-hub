@@ -133,6 +133,39 @@ app.get('/api/tasks/:id', async (c) => {
   return c.json({ ...t, sessionId });
 });
 
+// Rename or re-project a task via PATCH (used by sidebar ⋯ menu).
+app.patch('/api/tasks/:id', async (c) => {
+  const userId = c.get('userId');
+  const taskId = c.req.param('id');
+  const body = (await c.req.json().catch(() => ({}))) as {
+    label?: string | null;
+    projectId?: string | null;
+  };
+  if (body.label !== undefined) {
+    await sql`
+      UPDATE tasks SET label = ${body.label}
+       WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid
+    `;
+  }
+  if (body.projectId !== undefined) {
+    await sql`
+      UPDATE tasks SET project_id = ${body.projectId}
+       WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid
+    `;
+  }
+  return c.json({ ok: true });
+});
+
+app.delete('/api/tasks/:id', async (c) => {
+  const userId = c.get('userId');
+  const taskId = c.req.param('id');
+  await sql`
+    DELETE FROM tasks
+     WHERE id = ${taskId}::uuid AND user_id = ${userId}::uuid
+  `;
+  return c.json({ ok: true });
+});
+
 // ---------- Session creation (core) ----------
 const CreateSessionSchema = z.object({
   profileId: z.string().default('default'),

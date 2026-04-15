@@ -16,6 +16,7 @@ interface Project {
 interface Task {
   id: string;
   prompt: string;
+  label: string | null;
   status: string;
   createdAt: string;
   profileId: string;
@@ -32,24 +33,26 @@ export function Sidebar() {
   const [budget, setBudget] = useState<Budget | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
+  const load = async () => {
+    try {
+      const [p, t, b] = await Promise.all([
+        api<{ projects: Project[] }>('/api/projects'),
+        api<{ tasks: Task[] }>('/api/tasks'),
+        api<Budget>('/api/me/budget'),
+      ]);
+      setProjects(p.projects);
+      setTasks(t.tasks.slice(0, 12));
+      setBudget(b);
+    } catch {
+      // silent: initial load may fail before token
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [p, t, b] = await Promise.all([
-          api<{ projects: Project[] }>('/api/projects'),
-          api<{ tasks: Task[] }>('/api/tasks'),
-          api<Budget>('/api/me/budget'),
-        ]);
-        setProjects(p.projects);
-        setTasks(t.tasks.slice(0, 12));
-        setBudget(b);
-      } catch {
-        // silent: initial load may fail before token
-      }
-    };
     void load();
     const id = setInterval(load, 8000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isActive = (path: string) =>
@@ -135,7 +138,7 @@ export function Sidebar() {
         />
         <TopTab
           href="/workspace"
-          label="Workspace"
+          label="Monitor"
           active={pathname?.startsWith('/workspace') ?? false}
         />
       </div>
@@ -182,18 +185,13 @@ export function Sidebar() {
         <Section title="最近のセッション" actionHref="/workspace" actionLabel="開く">
           <ul className="space-y-0.5">
             {tasks.map((t) => (
-              <li key={t.id}>
-                <Link
-                  href={`/tasks/${t.id}`}
-                  className={cn(
-                    'flex min-w-0 items-start gap-2 rounded-card px-2 py-1.5 font-sans text-[12.5px] leading-[1.35] text-charcoal hover:bg-ivory',
-                    isActive(`/tasks/${t.id}`) ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : '',
-                  )}
-                >
-                  <StatusDot status={t.status} />
-                  <span className="line-clamp-2 flex-1 break-words">{t.prompt}</span>
-                </Link>
-              </li>
+              <SessionRow
+                key={t.id}
+                task={t}
+                active={isActive(`/tasks/${t.id}`)}
+                projects={projects}
+                onChanged={() => load()}
+              />
             ))}
             {tasks.length === 0 && (
               <li className="px-2 py-1.5 font-sans text-[12px] text-stone">まだセッションなし</li>
@@ -285,6 +283,149 @@ function Section({
       </div>
       {children}
     </div>
+  );
+}
+
+function SessionRow({
+  task,
+  active,
+  projects,
+  onChanged,
+}: {
+  task: Task;
+  active: boolean;
+  projects: Project[];
+  onChanged: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(task.label ?? task.prompt);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = () => setMenuOpen(false);
+    const t = setTimeout(() => document.addEventListener('click', onDoc), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', onDoc);
+    };
+  }, [menuOpen]);
+
+  const submitRename = async () => {
+    const next = draft.trim();
+    if (!next) {
+      setRenaming(false);
+      return;
+    }
+    await api(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ label: next }),
+    });
+    setRenaming(false);
+    onChanged();
+  };
+
+  const moveProject = async (projectId: string) => {
+    await api(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ projectId }),
+    });
+    setMenuOpen(false);
+    onChanged();
+  };
+
+  const del = async () => {
+    if (!window.confirm('このセッションを削除しますか? (取り消しできません)')) return;
+    await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
+    setMenuOpen(false);
+    onChanged();
+  };
+
+  const displayText = task.label ?? task.prompt;
+
+  return (
+    <li className="group relative">
+      <div
+        className={cn(
+          'flex min-w-0 items-start gap-2 rounded-card px-2 py-1.5 font-sans text-[12.5px] leading-[1.35] text-charcoal hover:bg-ivory',
+          active ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : '',
+        )}
+      >
+        <Link href={`/tasks/${task.id}`} className="flex min-w-0 flex-1 items-start gap-2">
+          <StatusDot status={task.status} />
+          {renaming ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={submitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submitRename();
+                if (e.key === 'Escape') setRenaming(false);
+              }}
+              onClick={(e) => e.preventDefault()}
+              className="w-full rounded-card border border-border-warm bg-white px-1 text-[12.5px] text-near focus:outline-none"
+            />
+          ) : (
+            <span className="line-clamp-2 flex-1 break-words">{displayText}</span>
+          )}
+        </Link>
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenuOpen((v) => !v);
+          }}
+          className="shrink-0 rounded p-0.5 text-stone opacity-0 transition hover:bg-sand hover:text-charcoal group-hover:opacity-100"
+          aria-label="セッションメニュー"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="3" cy="8" r="1.2" fill="currentColor" />
+            <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+            <circle cx="13" cy="8" r="1.2" fill="currentColor" />
+          </svg>
+        </button>
+      </div>
+      {menuOpen && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-1 top-7 z-20 w-52 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setRenaming(true);
+              setMenuOpen(false);
+            }}
+            className="block w-full px-3 py-2 text-left font-sans text-[12.5px] text-charcoal hover:bg-sand"
+          >
+            名前を変更
+          </button>
+          <div className="border-t border-border-cream">
+            <div className="px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.5px] text-stone">
+              プロジェクトに移動
+            </div>
+            {projects.slice(0, 6).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => moveProject(p.id)}
+                className="block w-full truncate px-3 py-1.5 text-left font-sans text-[12.5px] text-charcoal hover:bg-sand"
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={del}
+            className="block w-full border-t border-border-cream px-3 py-2 text-left font-sans text-[12.5px] text-[#b53333] hover:bg-[#fbeaea]"
+          >
+            削除
+          </button>
+        </div>
+      )}
+    </li>
   );
 }
 

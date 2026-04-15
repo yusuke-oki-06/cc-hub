@@ -4,8 +4,13 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { api, runnerBase, getAuthHeader, withTimeout } from '@/lib/api';
+import { SiSlack, SiJira } from 'react-icons/si';
 import { TokenSetup } from '@/components/token-setup';
-import type { ToolProfile } from '@cc-hub/shared';
+import {
+  GUI_PERMISSION_MODES,
+  type GuiPermissionMode,
+  type ToolProfile,
+} from '@cc-hub/shared';
 
 interface Project {
   id: string;
@@ -76,6 +81,7 @@ export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [gitUrl, setGitUrl] = useState('');
   const [mode, setMode] = useState<'upload' | 'git' | 'none'>('none');
+  const [permissionMode, setPermissionMode] = useState<GuiPermissionMode>('default');
   const [phase, setPhase] = useState<SubmitPhase>('idle');
   const [uploadProgress, setUploadProgress] = useState<{ index: number; total: number }>({ index: 0, total: 0 });
   const [error, setError] = useState<string>();
@@ -134,7 +140,7 @@ export default function Home() {
       await withTimeout(
         api(`/api/sessions/${created.sessionId}/claude/start`, {
           method: 'POST',
-          body: JSON.stringify({}),
+          body: JSON.stringify({ permissionMode }),
         }),
         120_000,
         'Claude 起動',
@@ -161,8 +167,9 @@ export default function Home() {
         </h1>
       </header>
 
-      {/* Compact prompt composer (claude.ai-style) */}
-      <Card className="overflow-hidden p-0 shadow-whisper theme-airbnb-composer">
+      {/* Compact prompt composer (claude.ai-style). overflow-visible so
+          the PlusMenu popover can extend below the toolbar. */}
+      <Card className="overflow-visible p-0 shadow-whisper theme-airbnb-composer">
         <textarea
           rows={2}
           className="block w-full resize-none border-0 bg-transparent px-5 pt-5 pb-2 font-sans text-[16px] leading-[1.6] text-near placeholder:text-stone focus:outline-none"
@@ -192,6 +199,18 @@ export default function Home() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <select
+              className="rounded-card border border-border-warm bg-white px-2 py-1 font-sans text-[12px] text-near"
+              value={permissionMode}
+              onChange={(e) => setPermissionMode(e.target.value as GuiPermissionMode)}
+              title="実行モード"
+            >
+              {GUI_PERMISSION_MODES.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
             <select
               className="rounded-card border border-border-warm bg-white px-2 py-1 font-sans text-[12px] text-near"
               value={projectId}
@@ -303,27 +322,11 @@ function ChipIconSvg({ name }: { name: ChipIcon }) {
     );
   }
   if (name === 'slack') {
-    return (
-      <svg {...common}>
-        <path
-          d="M4 10a1.5 1.5 0 1 0 0 3h1.5v-1.5H4zm3 0v3a1.5 1.5 0 0 0 3 0V10zm-3-3a1.5 1.5 0 1 1 0-3h1.5v1.5H4zm3 0V4a1.5 1.5 0 0 1 3 0v3zm5 3a1.5 1.5 0 1 1 0-3h-1.5v1.5H12zm-3 0V7a1.5 1.5 0 1 1 3 0v3zm3 3a1.5 1.5 0 1 0 0-3h-1.5v1.5H12z"
-          fill="currentColor"
-        />
-      </svg>
-    );
+    // Official Slack brand (via simple-icons)
+    return <SiSlack size={13} color="#4A154B" aria-hidden="true" />;
   }
-  // jira — abstract triangle stack
-  return (
-    <svg {...common}>
-      <path
-        d="M8 2.5 13 8H9v1.5l-3 2.5V9H3L8 2.5z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </svg>
-  );
+  // Official Jira brand
+  return <SiJira size={13} color="#0052CC" aria-hidden="true" />;
 }
 
 function PlusMenu({
