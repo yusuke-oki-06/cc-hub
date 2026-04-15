@@ -36,8 +36,8 @@ test('capture screenshots for article', async ({ authedPage: page }) => {
   await page.screenshot({ path: path.join(SHOTS, '04-landing-sidebar.png'), fullPage: true });
 
   // 5. Submit a quick prompt and capture task page mid-stream
-  await page.getByPlaceholder(/例:/).fill('"pong" とだけ返答してください。');
-  await page.getByRole('button', { name: /実行/ }).click();
+  await page.getByPlaceholder(/今日はどんな/).fill('"pong" とだけ返答してください。');
+  await page.getByRole('button', { name: /送信/ }).click();
   await page.waitForURL(/\/tasks\/[0-9a-f-]+/, { timeout: 45_000 });
   // Wait until we see either ThinkingIndicator or the first assistant bubble
   await expect(

@@ -4,8 +4,8 @@ test.describe('Langfuse trace link', () => {
   test('trace link uses dynamic project id (not hardcoded cc-hub-phase1)', async ({
     authedPage: page,
   }) => {
-    await page.getByPlaceholder(/例:/).fill('"pong" とだけ返答してください。');
-    await page.getByRole('button', { name: /実行/ }).click();
+    await page.getByPlaceholder(/今日はどんな/).fill('"pong" とだけ返答してください。');
+    await page.getByRole('button', { name: /送信/ }).click();
 
     await page.waitForURL(/\/tasks\/[0-9a-f-]+/, { timeout: 45_000 });
     await expect(page.getByText(/完了しました/)).toBeVisible({ timeout: 90_000 });

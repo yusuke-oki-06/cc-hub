@@ -25,14 +25,18 @@ test.describe('Quality gates', () => {
     await expect(badge).toBeVisible({ timeout: 10_000 });
   });
 
-  test('Plus menu reveals attach/git options without emoji', async ({ authedPage: page }) => {
-    // Composer's + button opens a popover with 「ファイル添付」+「Git クローン」
+  test('Plus menu reveals attach/skill/project options without emoji', async ({ authedPage: page }) => {
+    // Composer's + button opens a popover with ファイル添付 / スキル / プロジェクト
+    // (Git クローン は Phase 1.14 で撤去済み)
     await page.getByRole('button', { name: /添付メニュー/ }).click();
     const attach = page.getByRole('button', { name: /ファイル添付/ });
-    const git = page.getByRole('button', { name: /Git クローン/ });
+    const skill = page.getByRole('button', { name: /スキルを選ぶ/ });
+    const project = page.getByRole('button', { name: /プロジェクトを選ぶ/ });
     await expect(attach).toBeVisible();
-    await expect(git).toBeVisible();
+    await expect(skill).toBeVisible();
+    await expect(project).toBeVisible();
     expect(await attach.innerText()).not.toMatch(EMOJI_RE);
-    expect(await git.innerText()).not.toMatch(EMOJI_RE);
+    expect(await skill.innerText()).not.toMatch(EMOJI_RE);
+    expect(await project.innerText()).not.toMatch(EMOJI_RE);
   });
 });
