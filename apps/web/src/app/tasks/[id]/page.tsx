@@ -161,20 +161,56 @@ export default function TaskView() {
     await api(`/api/sessions/${sessionId}/abort`, { method: 'POST' });
   };
 
+  const continueInNewSession = async (text: string) => {
+    // Session is dead (runner restarted, etc.). Create a fresh task
+    // carrying this prompt and navigate to it. The new task picks up
+    // the same profile as the current task for continuity.
+    const created = await api<{ sessionId: string; taskId: string }>('/api/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        profileId: task?.profileId ?? 'default',
+        prompt: text,
+      }),
+    });
+    await api(`/api/sessions/${created.sessionId}/claude/start`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    router.push(`/tasks/${created.taskId}`);
+  };
+
   const sendPrompt = async (payload: ComposerSubmit) => {
     if (!sessionId) return;
-    await api(`/api/sessions/${sessionId}/claude/prompt`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    try {
+      await api(`/api/sessions/${sessionId}/claude/prompt`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      const msg = (err as Error).message ?? '';
+      if (msg.includes('session not active') || msg.startsWith('404')) {
+        await continueInNewSession(payload.text);
+        return;
+      }
+      throw err;
+    }
   };
 
   const sendShortcut = async (text: string) => {
     if (!sessionId) return;
-    await api(`/api/sessions/${sessionId}/claude/prompt`, {
-      method: 'POST',
-      body: JSON.stringify({ text }),
-    });
+    try {
+      await api(`/api/sessions/${sessionId}/claude/prompt`, {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      });
+    } catch (err) {
+      const msg = (err as Error).message ?? '';
+      if (msg.includes('session not active') || msg.startsWith('404')) {
+        await continueInNewSession(text);
+      } else {
+        throw err;
+      }
+    }
   };
 
   return (

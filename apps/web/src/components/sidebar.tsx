@@ -367,7 +367,7 @@ function SessionRow({
               className="w-full rounded-card border border-border-warm bg-white px-1 text-[12.5px] text-near focus:outline-none"
             />
           ) : (
-            <span className="line-clamp-2 flex-1 break-words">{displayText}</span>
+            <span className="line-clamp-1 flex-1 break-words">{displayText}</span>
           )}
         </Link>
         <button
@@ -380,9 +380,9 @@ function SessionRow({
           aria-label="セッションメニュー"
         >
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="3" cy="8" r="1.2" fill="currentColor" />
+            <circle cx="8" cy="3" r="1.2" fill="currentColor" />
             <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-            <circle cx="13" cy="8" r="1.2" fill="currentColor" />
+            <circle cx="8" cy="13" r="1.2" fill="currentColor" />
           </svg>
         </button>
       </div>

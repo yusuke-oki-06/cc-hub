@@ -17,9 +17,14 @@ interface Project {
   name: string;
 }
 
-type ChipIcon = 'bulb' | 'pencil' | 'slack' | 'jira';
+type ChipIcon = 'bulb' | 'pencil' | 'slack' | 'jira' | 'clock';
 
-const SUGGESTIONS: Array<{ title: string; prompt: string; icon: ChipIcon }> = [
+const SUGGESTIONS: Array<{
+  title: string;
+  prompt?: string;
+  icon: ChipIcon;
+  href?: string;
+}> = [
   {
     title: 'ブレインストーミング',
     icon: 'bulb',
@@ -43,6 +48,11 @@ const SUGGESTIONS: Array<{ title: string; prompt: string; icon: ChipIcon }> = [
     icon: 'jira',
     prompt:
       'Jira (MCP 連携) で issue を検索・要約したいです。どのプロジェクト / 期間 / キーワードか聞いてから実行してください。',
+  },
+  {
+    title: 'ルーティン',
+    icon: 'clock',
+    href: '/schedules',
   },
 ];
 
@@ -278,17 +288,28 @@ export default function Home() {
 
       {/* Suggestion chips (claude.ai-style, with icons) */}
       <section className="mt-4 flex flex-wrap justify-center gap-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s.title}
-            onClick={() => setPrompt(s.prompt)}
-            title={s.prompt}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring"
-          >
-            <ChipIconSvg name={s.icon} />
-            {s.title}
-          </button>
-        ))}
+        {SUGGESTIONS.map((s) =>
+          s.href ? (
+            <a
+              key={s.title}
+              href={s.href}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring"
+            >
+              <ChipIconSvg name={s.icon} />
+              {s.title}
+            </a>
+          ) : (
+            <button
+              key={s.title}
+              onClick={() => s.prompt && setPrompt(s.prompt)}
+              title={s.prompt}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring"
+            >
+              <ChipIconSvg name={s.icon} />
+              {s.title}
+            </button>
+          ),
+        )}
       </section>
     </div>
   );
@@ -318,6 +339,14 @@ function ChipIconSvg({ name }: { name: ChipIcon }) {
           strokeWidth="1.3"
           strokeLinejoin="round"
         />
+      </svg>
+    );
+  }
+  if (name === 'clock') {
+    return (
+      <svg {...common}>
+        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
+        <path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       </svg>
     );
   }
