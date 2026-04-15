@@ -123,7 +123,9 @@ export default function Home() {
       <TokenSetup />
 
       <header className="mb-10 mt-2 text-center">
-        <h1 className="font-serif text-[56px] leading-[1.05] text-near">今日は何をしましょう?</h1>
+        <h1 className="font-serif text-[56px] leading-[1.05] text-near theme-airbnb-hero">
+          今日は何をしましょう?
+        </h1>
         <p className="mt-3 font-sans text-[14px] text-olive">
           ファイル or Git を添えて依頼を書くだけ。Claude が解析して返します。
         </p>

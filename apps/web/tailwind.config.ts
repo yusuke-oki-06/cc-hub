@@ -9,6 +9,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Semantic tokens (theme-aware via CSS variables) — prefer these
+        // when the color should swap on [data-theme='airbnb'].
+        fg: 'var(--text)',
+        'fg-muted': 'var(--text-muted)',
+        surface: 'var(--surface)',
+        'surface-raised': 'var(--surface-raised)',
+        primary: 'var(--primary)',
+        'primary-hover': 'var(--primary-hover)',
+        'border-token': 'var(--border)',
+        'border-soft': 'var(--border-soft)',
+        'ring-token': 'var(--ring)',
+        // Existing named colors — kept for backward compatibility so current
+        // pages continue to render the Parchment theme exactly as before.
         // Primary / Brand
         terracotta: { DEFAULT: '#c96442', light: '#d97757' },
         // Surfaces

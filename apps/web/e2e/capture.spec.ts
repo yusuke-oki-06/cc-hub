@@ -47,6 +47,34 @@ test('capture screenshots for article', async ({ authedPage: page }) => {
   await page.screenshot({ path: path.join(SHOTS, '05-task-view.png'), fullPage: false });
 });
 
+test('capture airbnb theme variants', async ({ authedPage: page }) => {
+  test.setTimeout(60_000);
+
+  // Flip to airbnb theme
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem('cc-hub-theme', 'airbnb');
+    document.documentElement.setAttribute('data-theme', 'airbnb');
+  });
+
+  // Landing (airbnb)
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: path.join(SHOTS, 'airbnb-01-landing.png'), fullPage: false });
+
+  // Wiki graph (airbnb)
+  await page.goto('/wiki');
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(3000);
+  await page.screenshot({ path: path.join(SHOTS, 'airbnb-02-wiki-graph.png'), fullPage: false });
+
+  // Reset back to parchment so the other capture tests still show default look
+  await page.evaluate(() => {
+    localStorage.removeItem('cc-hub-theme');
+    document.documentElement.removeAttribute('data-theme');
+  });
+});
+
 test('capture Langfuse trace UI', async ({ browser }) => {
   test.setTimeout(90_000);
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 860 } });

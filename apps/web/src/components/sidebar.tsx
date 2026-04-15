@@ -6,6 +6,7 @@ import { cn } from '@/lib/cn';
 import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { LangfuseBadge } from '@/components/langfuse-badge';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface Project {
   id: string;
@@ -223,6 +224,12 @@ export function Sidebar() {
         )}
         <div className="pt-1">
           <LangfuseBadge />
+        </div>
+        <div className="flex items-center justify-between pt-1">
+          <span className="font-sans text-[10px] uppercase tracking-[0.5px] text-stone">
+            Theme
+          </span>
+          <ThemeToggle />
         </div>
       </div>
     </aside>
