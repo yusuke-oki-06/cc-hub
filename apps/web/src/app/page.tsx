@@ -44,6 +44,45 @@ function phaseLabel(phase: SubmitPhase, uploadIndex = 0, uploadTotal = 0): strin
   return '実行 (⌘Enter)';
 }
 
+// ─── Time-of-day greeting + randomized headline ─────────────────────
+type TimeSlot = 'dawn' | 'morning' | 'noon' | 'afternoon' | 'evening' | 'night' | 'late';
+
+const GREETINGS: Record<TimeSlot, string[]> = {
+  dawn:      ['早起きですね、おはようございます', '早朝からお疲れ様です', 'まだ静かな朝ですね'],
+  morning:   ['おはようございます', 'いい朝ですね', '今日も一日始まりました'],
+  noon:      ['こんにちは', 'お昼休憩中ですか?', 'お疲れ様です'],
+  afternoon: ['午後もよろしくお願いします', '集中できる時間ですね', 'おかえりなさい'],
+  evening:   ['お疲れ様です', 'こんばんは', '一日、お疲れ様です'],
+  night:     ['こんばんは', '夜の作業ですね', 'お疲れ様です'],
+  late:      ['夜更かしですね', 'こんな時間までお疲れ様です', 'もう少しで一段落?'],
+};
+
+const HEADLINES: string[] = [
+  '今日は何をしましょう?',
+  '何から始めましょうか?',
+  'どんなタスクですか?',
+  'どんな資料を見てもらいましょう?',
+  '気になっていることを教えてください',
+  '手伝えることはありますか?',
+  '次の一歩、お手伝いします',
+  '今日の困りごとを教えてください',
+  'どんな調べ物をしますか?',
+  'さて、始めましょうか',
+];
+
+function pickSlot(h: number): TimeSlot {
+  if (h >= 5 && h < 8) return 'dawn';
+  if (h >= 8 && h < 11) return 'morning';
+  if (h >= 11 && h < 14) return 'noon';
+  if (h >= 14 && h < 17) return 'afternoon';
+  if (h >= 17 && h < 19) return 'evening';
+  if (h >= 19 && h < 23) return 'night';
+  return 'late';
+}
+function pickRandom<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]!;
+}
+
 export default function Home() {
   const router = useRouter();
   const [profiles, setProfiles] = useState<ToolProfile[]>([]);
@@ -58,6 +97,21 @@ export default function Home() {
   const [uploadProgress, setUploadProgress] = useState<{ index: number; total: number }>({ index: 0, total: 0 });
   const [error, setError] = useState<string>();
   const loading = phase !== 'idle';
+
+  // Time-based greeting + random headline, picked on client mount to avoid
+  // SSR hydration mismatch. SSR serves a neutral default that gets replaced
+  // after hydration so the pair is always refreshed per visit.
+  const [greeting, setGreeting] = useState<{ hello: string; headline: string }>({
+    hello: '',
+    headline: '今日は何をしましょう?',
+  });
+  useEffect(() => {
+    const slot = pickSlot(new Date().getHours());
+    setGreeting({
+      hello: pickRandom(GREETINGS[slot]),
+      headline: pickRandom(HEADLINES),
+    });
+  }, []);
 
   useEffect(() => {
     void Promise.all([
@@ -123,8 +177,16 @@ export default function Home() {
       <TokenSetup />
 
       <header className="mb-10 mt-2 text-center">
-        <h1 className="font-serif text-[56px] leading-[1.05] text-near theme-airbnb-hero">
-          今日は何をしましょう?
+        {greeting.hello && (
+          <div className="mb-2 font-sans text-[13px] text-olive" suppressHydrationWarning>
+            {greeting.hello}
+          </div>
+        )}
+        <h1
+          className="font-serif text-[56px] leading-[1.05] text-near theme-airbnb-hero"
+          suppressHydrationWarning
+        >
+          {greeting.headline}
         </h1>
         <p className="mt-3 font-sans text-[14px] text-olive">
           ファイル or Git を添えて依頼を書くだけ。Claude が解析して返します。
