@@ -104,6 +104,8 @@ export default function Home() {
   const [phase, setPhase] = useState<SubmitPhase>('idle');
   const [uploadProgress, setUploadProgress] = useState<{ index: number; total: number }>({ index: 0, total: 0 });
   const [error, setError] = useState<string>();
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const loading = phase !== 'idle';
 
   // Random headline, picked on client mount to avoid SSR hydration mismatch.
@@ -212,7 +214,44 @@ export default function Home() {
 
       {/* Compact prompt composer (claude.ai-style). overflow-visible so
           the PlusMenu popover can extend below the toolbar. */}
-      <Card className="overflow-visible p-0 shadow-whisper theme-airbnb-composer">
+      <Card
+        className={
+          'overflow-visible p-0 shadow-whisper theme-airbnb-composer transition ' +
+          (dragOver ? 'ring-2 ring-[#2f6fbf]/50' : '')
+        }
+        onDragOver={(e) => {
+          // Only act if files are being dragged
+          if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) {
+            e.preventDefault();
+            if (!dragOver) setDragOver(true);
+          }
+        }}
+        onDragLeave={(e) => {
+          // Only clear when leaving the card itself (not inner children)
+          if (e.currentTarget === e.target) setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const dropped = Array.from(e.dataTransfer.files ?? []);
+          if (dropped.length === 0) return;
+          setFiles([...files, ...dropped]);
+          setMode('upload');
+        }}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const picked = Array.from(e.target.files ?? []);
+            if (picked.length === 0) return;
+            setFiles([...files, ...picked]);
+            setMode('upload');
+            e.target.value = ''; // allow reselecting the same file later
+          }}
+        />
         <textarea
           ref={textareaRef}
           rows={2}
@@ -244,9 +283,8 @@ export default function Home() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-cream bg-parchment/40 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <PlusMenu
-              mode={mode}
-              setMode={setMode}
               files={files}
+              onPickFile={() => fileInputRef.current?.click()}
               onPickSkill={() => setSkillModal(true)}
               onPickProject={() => setProjectModal(true)}
             />
@@ -454,15 +492,13 @@ function ChipIconSvg({ name }: { name: ChipIcon }) {
 }
 
 function PlusMenu({
-  mode,
-  setMode,
   files,
+  onPickFile,
   onPickSkill,
   onPickProject,
 }: {
-  mode: 'upload' | 'none';
-  setMode: (m: 'upload' | 'none') => void;
   files: File[];
+  onPickFile: () => void;
   onPickSkill: () => void;
   onPickProject: () => void;
 }) {
@@ -501,7 +537,7 @@ function PlusMenu({
           <button
             type="button"
             onClick={() => {
-              setMode(mode === 'upload' ? 'none' : 'upload');
+              onPickFile();
               setOpen(false);
             }}
             className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left font-sans text-[13px] text-charcoal hover:bg-sand"
