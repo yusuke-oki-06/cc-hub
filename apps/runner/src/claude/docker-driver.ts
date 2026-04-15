@@ -198,10 +198,12 @@ async function startClaudeExec(
   // signals termination before the watchdog is scheduled (temporal-dead-zone
   // safety).
   let watchdog: ReturnType<typeof setTimeout> | undefined;
+  let timeLimit: ReturnType<typeof setTimeout> | undefined;
   async function fireExit(reason: string): Promise<void> {
     if (exited) return;
     exited = true;
     if (watchdog) clearTimeout(watchdog);
+    if (timeLimit) clearTimeout(timeLimit);
     for (const ev of parser.flush()) for (const cb of eventListeners) cb(ev);
     let code: number | null = null;
     try {
@@ -221,8 +223,13 @@ async function startClaudeExec(
     void fireExit('close');
   });
 
-  const timeLimit = setTimeout(
+  timeLimit = setTimeout(
     () => {
+      // Only surface the time-limit error if the exec hasn't already
+      // exited cleanly. Without this guard the timer fires 1800s after a
+      // normal exit and spams `session_time_limit_exceeded` into the
+      // event bus of a session that has long since ended.
+      if (exited) return;
       for (const cb of errorListeners) cb(new Error('session_time_limit_exceeded'));
       try {
         duplex.end();
