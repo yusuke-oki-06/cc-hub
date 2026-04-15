@@ -379,22 +379,26 @@ export default function TaskView() {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Jump-to-bottom 丸ボタン — 未読があるときチャット中央少し上に浮かぶ */}
-          {!atBottom && timeline.length > 0 && (
-            <button
-              type="button"
-              onClick={scrollToBottom}
-              aria-label="最新へ移動"
-              title="最新へ移動"
-              className="absolute left-1/2 top-10 z-10 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-border-warm bg-white text-charcoal shadow-[0_6px_16px_rgba(0,0,0,0.12)] transition hover:bg-sand"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M8 3v9M4 9l4 4 4-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          )}
+            {/* Jump-to-bottom 丸ボタン — 追加クエリ入力欄の上に、ボタン縦幅
+                1 個分の隙間で浮かせる。スクロール領域内に sticky で置くこと
+                で常に viewport 下部の固定位置に表示される。 */}
+            {!atBottom && timeline.length > 0 && (
+              <div className="pointer-events-none sticky bottom-10 z-10 flex w-full justify-center">
+                <button
+                  type="button"
+                  onClick={scrollToBottom}
+                  aria-label="最新へ移動"
+                  title="最新へ移動"
+                  className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-warm bg-white text-charcoal shadow-[0_6px_16px_rgba(0,0,0,0.12)] transition hover:bg-sand"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M8 3v9M4 9l4 4 4-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Composer (bottom-fixed within section via grid-rows auto) */}
           <PromptComposer
