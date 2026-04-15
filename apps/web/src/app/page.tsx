@@ -259,24 +259,41 @@ export default function Home() {
               onPickProject={() => setProjectModal(true)}
             />
             {projectId !== UNTAGGED_PROJECT_ID && (
-              <button
-                type="button"
-                onClick={() => setProjectModal(true)}
-                title={projects.find((p) => p.id === projectId)?.name ?? 'プロジェクト'}
-                aria-label={`プロジェクト: ${projects.find((p) => p.id === projectId)?.name ?? ''}`}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#2f6fbf] text-white transition hover:bg-[#2456a0]"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path
-                    d="M2.5 4.2a1 1 0 011-1h3.2l1.2 1.4h4.6a1 1 0 011 1v6.2a1 1 0 01-1 1h-9a1 1 0 01-1-1V4.2z"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    fill="currentColor"
-                    fillOpacity="0.25"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
+              <div className="group relative inline-flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setProjectModal(true)}
+                  aria-label={`プロジェクト: ${projects.find((p) => p.id === projectId)?.name ?? ''}`}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#2f6fbf] text-white transition hover:bg-[#2456a0]"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M2.5 4.2a1 1 0 011-1h3.2l1.2 1.4h4.6a1 1 0 011 1v6.2a1 1 0 01-1 1h-9a1 1 0 01-1-1V4.2z"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      fill="currentColor"
+                      fillOpacity="0.25"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProjectId(UNTAGGED_PROJECT_ID)}
+                  aria-label="プロジェクトを解除"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded text-stone transition hover:bg-sand hover:text-charcoal"
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                    <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <div
+                  role="tooltip"
+                  className="pointer-events-none absolute left-0 top-full z-30 mt-1.5 whitespace-nowrap rounded-md border border-border-warm bg-white px-2.5 py-1 font-sans text-[12px] text-near opacity-0 shadow-whisper transition-opacity duration-100 group-hover:opacity-100"
+                >
+                  {projects.find((p) => p.id === projectId)?.name ?? 'プロジェクト'}
+                </div>
+              </div>
             )}
             {files.length > 0 && (
               <span className="font-sans text-[12px] text-olive">添付 {files.length} 件</span>
