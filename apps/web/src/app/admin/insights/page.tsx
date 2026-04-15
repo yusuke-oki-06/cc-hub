@@ -354,7 +354,7 @@ export default function AdminInsights() {
 
         <Card>
           <CardHeader>
-            <CardTitle>モデル別 利用 (今月)</CardTitle>
+            <CardTitle>モデル別 利用回数 (今月)</CardTitle>
             <span className="font-sans text-[11px] text-stone">Langfuse トレースから集計</span>
           </CardHeader>
           {u?.modelBreakdown === null ? (
