@@ -45,7 +45,11 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
       }
       const msg = (payload as { message?: { content?: Array<{ type: string; text?: string; name?: string; input?: unknown }> } })
         .message;
-      const content = msg?.content ?? [];
+      // message.content is normally an Array<{type,text,...}> but some
+      // payloads (e.g. legacy string-format responses, or compacted entries)
+      // arrive as a bare string or missing. Guard against non-array values
+      // so `.filter` below never blows up the whole timeline.
+      const content = Array.isArray(msg?.content) ? msg.content : [];
       const text = content
         .filter((c) => c.type === 'text' && typeof c.text === 'string')
         .map((c) => c.text!)
