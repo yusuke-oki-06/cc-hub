@@ -12,7 +12,6 @@ import {
   GUI_PERMISSION_MODES,
   type ClaudeModelId,
   type GuiPermissionMode,
-  type ToolProfile,
 } from '@cc-hub/shared';
 
 interface Project {
@@ -86,7 +85,6 @@ function pickRandom<T>(arr: readonly T[]): T {
 
 export default function Home() {
   const router = useRouter();
-  const [profiles, setProfiles] = useState<ToolProfile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('00000000-0000-0000-0000-000000000100');
   const [profileId, setProfileId] = useState('default');
@@ -114,10 +112,9 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void Promise.all([
-      api<{ profiles: ToolProfile[] }>('/api/profiles').then((r) => setProfiles(r.profiles)),
-      api<{ projects: Project[] }>('/api/projects').then((r) => setProjects(r.projects)),
-    ]).catch((err) => setError((err as Error).message));
+    void api<{ projects: Project[] }>('/api/projects')
+      .then((r) => setProjects(r.projects))
+      .catch((err) => setError((err as Error).message));
   }, []);
 
   const submit = async () => {
@@ -265,18 +262,6 @@ export default function Home() {
             )}
             <ModelPicker value={model} onChange={setModel} />
             <ModeSelector value={permissionMode} onChange={setPermissionMode} />
-            <select
-              className="rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
-              value={profileId}
-              onChange={(e) => setProfileId(e.target.value)}
-              title="Profile"
-            >
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
           </div>
           <button
             type="button"
