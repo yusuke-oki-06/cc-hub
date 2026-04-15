@@ -327,7 +327,7 @@ async function runTurn(
   // Emit a standalone system.init event carrying the Langfuse trace URL so
   // the UI can surface "詳細トレース (Langfuse)" link without waiting for a
   // tool_use / assistant.message to arrive.
-  const traceUrl = langfuseDeepLink(traceCtx.traceId);
+  const traceUrl = await langfuseDeepLink(traceCtx.traceId);
   if (traceUrl) {
     await publishEvent({
       sessionId: session.sessionId,
@@ -774,16 +774,18 @@ app.get('/api/admin/traces', async (c) => {
         totalCost?: number;
       }>;
     };
-    const traces = (body.data ?? []).map((t) => ({
-      id: t.id,
-      name: t.name ?? '',
-      userId: t.userId ?? '',
-      sessionId: t.sessionId ?? '',
-      timestamp: t.timestamp ?? '',
-      latencySec: typeof t.latency === 'number' ? t.latency : null,
-      costUsd: typeof t.totalCost === 'number' ? t.totalCost : null,
-      url: langfuseDeepLink(t.id),
-    }));
+    const traces = await Promise.all(
+      (body.data ?? []).map(async (t) => ({
+        id: t.id,
+        name: t.name ?? '',
+        userId: t.userId ?? '',
+        sessionId: t.sessionId ?? '',
+        timestamp: t.timestamp ?? '',
+        latencySec: typeof t.latency === 'number' ? t.latency : null,
+        costUsd: typeof t.totalCost === 'number' ? t.totalCost : null,
+        url: await langfuseDeepLink(t.id),
+      })),
+    );
     return c.json({ traces });
   } catch (err) {
     return c.json({ traces: [], error: (err as Error).message }, 502);
@@ -795,7 +797,7 @@ app.get('/api/sessions/:id/trace-url', async (c) => {
   const sessionId = c.req.param('id');
   const session = getActiveSession(sessionId);
   if (!session) return c.json({ traceUrl: null }, 200);
-  return c.json({ traceUrl: langfuseDeepLink(sessionId) });
+  return c.json({ traceUrl: await langfuseDeepLink(sessionId) });
 });
 
 // ---------- Skills (marketplace) ----------

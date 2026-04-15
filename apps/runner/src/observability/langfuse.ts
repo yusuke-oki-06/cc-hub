@@ -13,10 +13,55 @@ function getClient(): Langfuse | null {
   return client;
 }
 
-export function langfuseDeepLink(traceId: string): string | null {
+let cachedProjectId: string | null = null;
+
+/**
+ * Resolve the Langfuse project ID owning the configured API keys.
+ * Order:
+ *   1. LANGFUSE_PROJECT_ID env (operator override)
+ *   2. GET {host}/api/public/projects authed with PK/SK — first project
+ *   3. null  → caller renders no link (existing fallback behaviour)
+ * Cached after first success.
+ */
+async function resolveProjectId(): Promise<string | null> {
+  if (cachedProjectId) return cachedProjectId;
+  const explicit = process.env.LANGFUSE_PROJECT_ID;
+  if (explicit) {
+    cachedProjectId = explicit;
+    return cachedProjectId;
+  }
+  const host = process.env.LANGFUSE_HOST;
+  const pk = process.env.LANGFUSE_PUBLIC_KEY;
+  const sk = process.env.LANGFUSE_SECRET_KEY;
+  if (!host || !pk || !sk) return null;
+  try {
+    const r = await fetch(`${host.replace(/\/$/, '')}/api/public/projects`, {
+      headers: { Authorization: 'Basic ' + Buffer.from(`${pk}:${sk}`).toString('base64') },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!r.ok) {
+      console.warn(`[langfuse] /api/public/projects returned ${r.status}`);
+      return null;
+    }
+    const body = (await r.json()) as { data?: Array<{ id: string; name?: string }> };
+    const id = body.data?.[0]?.id ?? null;
+    if (id) {
+      cachedProjectId = id;
+      console.log(`[langfuse] resolved project id = ${id} (${body.data?.[0]?.name ?? '?'})`);
+    }
+    return id;
+  } catch (err) {
+    console.warn('[langfuse] resolveProjectId failed', err);
+    return null;
+  }
+}
+
+export async function langfuseDeepLink(traceId: string): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_LANGFUSE_URL ?? process.env.LANGFUSE_HOST ?? null;
   if (!base) return null;
-  return `${base.replace(/\/$/, '')}/project/cc-hub-phase1/traces/${traceId}`;
+  const projectId = await resolveProjectId();
+  if (!projectId) return null;
+  return `${base.replace(/\/$/, '')}/project/${projectId}/traces/${traceId}`;
 }
 
 export interface SessionTraceContext {
