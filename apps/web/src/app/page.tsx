@@ -281,7 +281,7 @@ export default function Home() {
                   type="button"
                   onClick={() => setProjectId(UNTAGGED_PROJECT_ID)}
                   aria-label="プロジェクトを解除"
-                  className="inline-flex w-0 items-center justify-center overflow-hidden bg-white text-[#2f6fbf] opacity-0 transition-[width,opacity] duration-150 hover:bg-[#e8f0fa] group-hover:w-7 group-hover:opacity-100"
+                  className="inline-flex w-0 items-center justify-center overflow-hidden bg-[#2f6fbf] text-white opacity-0 transition-[width,opacity] duration-150 hover:bg-[#2456a0] group-hover:w-7 group-hover:opacity-100"
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
                     <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
