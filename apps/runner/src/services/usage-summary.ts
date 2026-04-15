@@ -6,9 +6,17 @@ export interface UsageSummary {
   monthUsd: number;
   taskCount: number;
   activeUsers: number;
+  /** Estimated human-labour time saved by delegating to Claude.
+   *  Modelled as `succeededTaskCount * MINUTES_SAVED_PER_TASK` where
+   *  the factor is a rough proxy; refine via an admin setting later. */
+  timeSavedMinutesMonth: number;
+  minutesSavedPerTask: number;
+  succeededCountMonth: number;
   topTasks: Array<{ taskId: string; prompt: string; costUsd: number; createdAt: string }>;
   perDay: Array<{ day: string; cost: number; tasks: number }>;
 }
+
+const MINUTES_SAVED_PER_TASK = 30;
 
 export async function getUsageSummary(): Promise<UsageSummary> {
   const [today] = await sql<{ sum: string }[]>`
@@ -45,12 +53,23 @@ export async function getUsageSummary(): Promise<UsageSummary> {
     GROUP BY 1 ORDER BY 1
   `;
 
+  // Count succeeded tasks this month for the time-saved estimate.
+  const [succeededMonth] = await sql<{ count: string }[]>`
+    SELECT count(*)::text FROM tasks
+    WHERE created_at >= date_trunc('month', now())
+      AND status = 'succeeded'
+  `;
+  const succeededCountMonth = Number(succeededMonth?.count ?? 0);
+
   return {
     todayUsd: Number(today?.sum ?? 0),
     weekUsd: Number(week?.sum ?? 0),
     monthUsd: Number(month?.sum ?? 0),
     taskCount: Number(tc?.count ?? 0),
     activeUsers: Number(au?.count ?? 0),
+    timeSavedMinutesMonth: succeededCountMonth * MINUTES_SAVED_PER_TASK,
+    minutesSavedPerTask: MINUTES_SAVED_PER_TASK,
+    succeededCountMonth,
     topTasks: topTasks.map((t) => ({
       taskId: t.id,
       prompt: t.prompt,

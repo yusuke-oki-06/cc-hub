@@ -846,7 +846,9 @@ app.get('/api/sessions/:id/trace-url', async (c) => {
 app.get('/api/skills', async (c) => {
   const { listSkills } = await import('./services/skills.js');
   const status = c.req.query('status') as 'published' | 'scan_passed' | undefined;
-  return c.json({ skills: await listSkills(status ? { status } : undefined) });
+  const category = c.req.query('category') || undefined;
+  const orderBy = c.req.query('orderBy') === 'popular' ? 'popular' : 'recent';
+  return c.json({ skills: await listSkills({ status, category, orderBy }) });
 });
 app.get('/api/skills/:id', async (c) => {
   const { getSkill } = await import('./services/skills.js');
@@ -934,6 +936,43 @@ app.post('/api/wiki/init', async (c) => {
   }
 });
 
+// ---------- Schedules (cron-driven sessions) ----------
+app.get('/api/schedules', async (c) => {
+  const { listSchedules } = await import('./services/scheduler.js');
+  return c.json({ schedules: await listSchedules(c.get('userId')) });
+});
+app.post('/api/schedules', async (c) => {
+  const { createSchedule } = await import('./services/scheduler.js');
+  const body = (await c.req.json().catch(() => ({}))) as {
+    name?: string;
+    cronExpr?: string;
+    prompt?: string;
+    profileId?: string;
+    projectId?: string;
+  };
+  if (!body.name || !body.cronExpr || !body.prompt) {
+    return c.json({ error: 'name/cronExpr/prompt は必須' }, 400);
+  }
+  try {
+    const row = await createSchedule({
+      userId: c.get('userId'),
+      name: body.name,
+      cronExpr: body.cronExpr,
+      prompt: body.prompt,
+      profileId: body.profileId ?? 'default',
+      projectId: body.projectId ?? null,
+    });
+    return c.json(row);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+app.delete('/api/schedules/:id', async (c) => {
+  const { deleteSchedule } = await import('./services/scheduler.js');
+  await deleteSchedule(c.get('userId'), c.req.param('id'));
+  return c.json({ ok: true });
+});
+
 // ---------- Dev helpers ----------
 app.post('/api/dev/publish', async (c) => {
   const body = await c.req.json<{ sessionId: string; eventType: string; payload: unknown }>();
@@ -991,6 +1030,10 @@ async function abortOrphanTasks(): Promise<void> {
   }
 }
 void abortOrphanTasks();
+void (async () => {
+  const { startScheduler } = await import('./services/scheduler.js');
+  await startScheduler();
+})();
 
 const port = config.RUNNER_PORT;
 const server = serve({ fetch: app.fetch, port });

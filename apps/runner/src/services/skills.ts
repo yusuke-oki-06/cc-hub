@@ -22,6 +22,8 @@ export interface SkillRow {
   authorId: string;
   status: 'draft' | 'scan_passed' | 'scan_failed' | 'published' | 'rejected';
   scanReport: SkillScanReport | null;
+  category: string;
+  installCount: number;
   createdAt: string;
 }
 
@@ -59,21 +61,56 @@ export async function publishSkill(
   return row;
 }
 
-export async function listSkills(filter?: { status?: SkillRow['status'] }): Promise<SkillRow[]> {
-  const rows = filter?.status
-    ? await sql<SkillRow[]>`
-        SELECT id::text, slug, version, title, description,
-          author_id::text AS "authorId", status, scan_report AS "scanReport",
-          created_at::text AS "createdAt"
-        FROM skills WHERE status = ${filter.status} ORDER BY created_at DESC LIMIT 100
-      `
-    : await sql<SkillRow[]>`
-        SELECT id::text, slug, version, title, description,
-          author_id::text AS "authorId", status, scan_report AS "scanReport",
-          created_at::text AS "createdAt"
-        FROM skills ORDER BY created_at DESC LIMIT 100
-      `;
-  return rows;
+export async function listSkills(filter?: {
+  status?: SkillRow['status'];
+  category?: string;
+  orderBy?: 'popular' | 'recent';
+}): Promise<SkillRow[]> {
+  const orderSql =
+    filter?.orderBy === 'popular'
+      ? sql`ORDER BY install_count DESC, created_at DESC`
+      : sql`ORDER BY created_at DESC`;
+  if (filter?.status && filter.category) {
+    return sql<SkillRow[]>`
+      SELECT id::text, slug, version, title, description,
+        author_id::text AS "authorId", status, scan_report AS "scanReport",
+        category, install_count AS "installCount",
+        created_at::text AS "createdAt"
+      FROM skills
+      WHERE status = ${filter.status} AND category = ${filter.category}
+      ${orderSql}
+      LIMIT 100
+    `;
+  }
+  if (filter?.status) {
+    return sql<SkillRow[]>`
+      SELECT id::text, slug, version, title, description,
+        author_id::text AS "authorId", status, scan_report AS "scanReport",
+        category, install_count AS "installCount",
+        created_at::text AS "createdAt"
+      FROM skills WHERE status = ${filter.status}
+      ${orderSql}
+      LIMIT 100
+    `;
+  }
+  if (filter?.category) {
+    return sql<SkillRow[]>`
+      SELECT id::text, slug, version, title, description,
+        author_id::text AS "authorId", status, scan_report AS "scanReport",
+        category, install_count AS "installCount",
+        created_at::text AS "createdAt"
+      FROM skills WHERE category = ${filter.category}
+      ${orderSql}
+      LIMIT 100
+    `;
+  }
+  return sql<SkillRow[]>`
+    SELECT id::text, slug, version, title, description,
+      author_id::text AS "authorId", status, scan_report AS "scanReport",
+      category, install_count AS "installCount",
+      created_at::text AS "createdAt"
+    FROM skills ${orderSql} LIMIT 100
+  `;
 }
 
 export async function getSkill(
@@ -82,6 +119,7 @@ export async function getSkill(
   const rows = await sql<Array<SkillRow & { content: Buffer }>>`
     SELECT id::text, slug, version, title, description,
       author_id::text AS "authorId", status, scan_report AS "scanReport",
+      category, install_count AS "installCount",
       created_at::text AS "createdAt", content
     FROM skills WHERE id = ${skillId}::uuid LIMIT 1
   `;
@@ -123,11 +161,20 @@ export async function installSkill(input: {
   profileId: string;
   skillId: string;
 }): Promise<void> {
-  await sql`
+  const r = await sql`
     INSERT INTO skill_installs (user_id, profile_id, skill_id)
     VALUES (${input.userId}::uuid, ${input.profileId}, ${input.skillId}::uuid)
     ON CONFLICT DO NOTHING
+    RETURNING 1 AS inserted
   `;
+  // Only increment the popularity counter when this (user, profile, skill)
+  // pair is new — repeated install calls shouldn't inflate the ranking.
+  if (r.length > 0) {
+    await sql`
+      UPDATE skills SET install_count = install_count + 1
+       WHERE id = ${input.skillId}::uuid
+    `;
+  }
 }
 
 export async function listInstalledSkills(

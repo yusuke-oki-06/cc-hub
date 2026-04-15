@@ -11,8 +11,18 @@ interface Usage {
   monthUsd: number;
   taskCount: number;
   activeUsers: number;
+  timeSavedMinutesMonth: number;
+  minutesSavedPerTask: number;
+  succeededCountMonth: number;
   topTasks: Array<{ taskId: string; prompt: string; costUsd: number; createdAt: string }>;
   perDay: Array<{ day: string; cost: number; tasks: number }>;
+}
+
+function formatTimeSaved(minutes: number): string {
+  if (minutes < 60) return `${minutes} 分`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h} 時間` : `${h} 時間 ${m} 分`;
 }
 
 export default function AdminInsights() {
@@ -52,9 +62,14 @@ export default function AdminInsights() {
         <StatCard label="今月" value={`$${u?.monthUsd.toFixed(2) ?? '…'}`} />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard label="今月のタスク数" value={`${u?.taskCount ?? '…'}`} />
         <StatCard label="今月のアクティブユーザー" value={`${u?.activeUsers ?? '…'}`} />
+        <StatCard
+          label="今月の稼働削減時間"
+          value={u ? formatTimeSaved(u.timeSavedMinutesMonth) : '…'}
+          hint={u ? `完了 ${u.succeededCountMonth} 件 × 人手 ${u.minutesSavedPerTask} 分/件の概算` : undefined}
+        />
       </section>
 
       <Card>
@@ -97,11 +112,12 @@ export default function AdminInsights() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <Card>
       <div className="font-sans text-[12px] text-stone">{label}</div>
       <div className="mt-1 font-serif text-[32px] leading-[1] text-near">{value}</div>
+      {hint && <div className="mt-1 font-sans text-[11px] text-stone">{hint}</div>}
     </Card>
   );
 }
