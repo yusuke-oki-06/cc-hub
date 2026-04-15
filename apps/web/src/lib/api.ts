@@ -1,7 +1,7 @@
 const BASE = process.env.NEXT_PUBLIC_RUNNER_URL ?? 'http://localhost:4000';
 
 function getToken(): string {
-  // Phase 1: fixed token in localStorage. Phase 2 で Auth.js + JWT に置き換え
+  // Fixed token in localStorage — replace with proper auth when/if needed
   if (typeof window === 'undefined') return '';
   return window.localStorage.getItem('cc-hub-token') ?? '';
 }
