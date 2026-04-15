@@ -15,11 +15,16 @@ interface Skill {
   status: string;
   category: string;
   installCount: number;
+  favoriteCount: number;
+  favoritedByMe: boolean | null;
   createdAt: string;
 }
 
+// `favorites` は「お気に入り登録済みだけ」を絞り込むフィルタ。通常カテゴリと
+// 並列に並べてタブ切替で扱う。
 const CATEGORIES: Array<{ id: string; label: string }> = [
   { id: 'all', label: 'すべて' },
+  { id: 'favorites', label: 'お気に入り' },
   { id: 'general', label: '汎用' },
   { id: 'writing', label: '執筆・編集' },
   { id: 'analysis', label: '分析' },
@@ -37,13 +42,19 @@ export default function SkillsPage() {
   const load = async () => {
     const params = new URLSearchParams();
     if (!showAll) params.set('status', 'published');
-    if (category !== 'all') params.set('category', category);
+    if (category === 'favorites') {
+      params.set('favoritedByMe', 'true');
+    } else if (category !== 'all') {
+      params.set('category', category);
+    }
     const [listRes, rankRes] = await Promise.all([
       api<{ skills: Skill[] }>(`/api/skills?${params.toString()}`),
       api<{ skills: Skill[] }>('/api/skills?status=published&orderBy=popular'),
     ]);
     setSkills(listRes.skills);
-    setRanking(rankRes.skills.filter((s) => s.installCount > 0).slice(0, 5));
+    // Show top 10 by install count; include those with zero so official seeds
+    // don't disappear entirely when no one has installed them yet.
+    setRanking(rankRes.skills.slice(0, 10));
   };
 
   useEffect(() => {
@@ -56,6 +67,11 @@ export default function SkillsPage() {
       method: 'POST',
       body: JSON.stringify({ profileId: 'default' }),
     });
+    await load();
+  };
+
+  const toggleFavorite = async (id: string) => {
+    await api(`/api/skills/${id}/favorite`, { method: 'POST' });
     await load();
   };
 
@@ -84,14 +100,14 @@ export default function SkillsPage() {
         </div>
       </div>
 
-      {/* Popularity ranking */}
+      {/* Popularity ranking — 常時表示 (Top 10)。メダル風の順位表示 */}
       {ranking.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>人気ランキング</CardTitle>
+            <CardTitle>人気ランキング Top 10</CardTitle>
             <span className="font-sans text-[11px] text-stone">インストール数順</span>
           </CardHeader>
-          <ol className="space-y-1.5 font-sans text-[13px]">
+          <ol className="space-y-1 font-sans text-[13px]">
             {ranking.map((s, i) => (
               <li key={s.id}>
                 <Link
@@ -99,17 +115,20 @@ export default function SkillsPage() {
                   className="flex items-center justify-between gap-3 rounded-card px-2 py-1.5 hover:bg-sand"
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="w-5 shrink-0 text-center font-serif text-[14px] text-terracotta">
-                      {i + 1}
-                    </span>
+                    <RankBadge rank={i + 1} />
                     <span className="truncate font-medium text-near">{s.title}</span>
                     <span className="shrink-0 font-mono text-[11px] text-stone">
                       {categoryLabel(s.category)}
                     </span>
                   </div>
-                  <span className="shrink-0 font-mono text-[11px] text-stone">
-                    インストール {s.installCount} 件
-                  </span>
+                  <div className="shrink-0 flex items-center gap-3 font-mono text-[11px] text-stone">
+                    <span>
+                      ★ <span className="tabular-nums">{s.favoriteCount}</span>
+                    </span>
+                    <span>
+                      インストール <span className="tabular-nums">{s.installCount}</span>
+                    </span>
+                  </div>
                 </Link>
               </li>
             ))}
@@ -131,6 +150,7 @@ export default function SkillsPage() {
                 : 'border-border-cream bg-ivory text-charcoal hover:bg-sand')
             }
           >
+            {c.id === 'favorites' ? '★ ' : ''}
             {c.label}
           </button>
         ))}
@@ -138,40 +158,65 @@ export default function SkillsPage() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {skills.map((s) => (
-          <Link key={s.id} href={`/skills/${s.id}`}>
-            <Card className="hover:shadow-ring transition cursor-pointer">
-              <CardHeader>
-                <CardTitle>{s.title}</CardTitle>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Badge tone="default">{categoryLabel(s.category)}</Badge>
-                  <Badge tone={statusTone(s.status)}>{s.status}</Badge>
+          <div key={s.id} className="relative">
+            <Link href={`/skills/${s.id}`}>
+              <Card className="hover:shadow-ring transition cursor-pointer">
+                <CardHeader>
+                  <CardTitle>{s.title}</CardTitle>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge tone="default">{categoryLabel(s.category)}</Badge>
+                    <Badge tone={statusTone(s.status)}>{s.status}</Badge>
+                  </div>
+                </CardHeader>
+                <p className="font-sans text-[13px] text-olive">{s.description ?? '—'}</p>
+                <div className="mt-2 flex items-center justify-between gap-3 font-mono text-[11px] text-stone">
+                  <span className="truncate">
+                    {s.slug} · v{s.version} · インストール{' '}
+                    <span className="tabular-nums">{s.installCount}</span> 件 · ★{' '}
+                    <span className="tabular-nums">{s.favoriteCount}</span>
+                  </span>
+                  {s.status === 'published' && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void install(s.id);
+                      }}
+                      className="shrink-0 rounded-card bg-terracotta px-3 py-1 font-sans text-[12px] text-ivory hover:bg-[#b5573a]"
+                    >
+                      install
+                    </button>
+                  )}
                 </div>
-              </CardHeader>
-              <p className="font-sans text-[13px] text-olive">{s.description ?? '—'}</p>
-              <div className="mt-2 flex items-center justify-between gap-3 font-mono text-[11px] text-stone">
-                <span className="truncate">
-                  {s.slug} · v{s.version} · インストール {s.installCount} 件
-                </span>
-                {s.status === 'published' && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      void install(s.id);
-                    }}
-                    className="shrink-0 rounded-card bg-terracotta px-3 py-1 font-sans text-[12px] text-ivory hover:bg-[#b5573a]"
-                  >
-                    install
-                  </button>
-                )}
-              </div>
-            </Card>
-          </Link>
+              </Card>
+            </Link>
+            {/* Favorite star — overlayed at the top-right of the card. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void toggleFavorite(s.id);
+              }}
+              aria-label={s.favoritedByMe ? 'お気に入り解除' : 'お気に入りに追加'}
+              title={s.favoritedByMe ? 'お気に入り解除' : 'お気に入りに追加'}
+              className={
+                'absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full transition ' +
+                (s.favoritedByMe
+                  ? 'bg-[#fff7d1] text-[#d4a017] hover:bg-[#fceba5]'
+                  : 'bg-white text-stone hover:bg-sand')
+              }
+            >
+              <StarIcon filled={!!s.favoritedByMe} />
+            </button>
+          </div>
         ))}
         {skills.length === 0 && (
           <Card>
             <div className="py-8 text-center font-sans text-[13px] text-stone">
-              このカテゴリにはまだ Skill がありません
+              {category === 'favorites'
+                ? 'お気に入りに登録したスキルはまだありません'
+                : 'このカテゴリにはまだ Skill がありません'}
             </div>
           </Card>
         )}
@@ -189,4 +234,43 @@ function statusTone(s: string): 'default' | 'success' | 'warn' | 'danger' {
   if (s === 'scan_passed') return 'warn';
   if (s === 'scan_failed' || s === 'rejected') return 'danger';
   return 'default';
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  const tone =
+    rank === 1
+      ? 'bg-[#e0b84c] text-white'
+      : rank === 2
+        ? 'bg-[#b5b2a8] text-white'
+        : rank === 3
+          ? 'bg-[#c17a4a] text-white'
+          : 'bg-ivory text-stone';
+  return (
+    <span
+      className={
+        'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-serif text-[12px] tabular-nums ' +
+        tone
+      }
+    >
+      {rank}
+    </span>
+  );
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polygon points="12 2 15 9 22 9.5 16.5 14 18 21 12 17 6 21 7.5 14 2 9.5 9 9 12 2" />
+    </svg>
+  );
 }

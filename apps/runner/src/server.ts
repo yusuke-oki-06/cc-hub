@@ -853,14 +853,31 @@ app.get('/api/skills', async (c) => {
   const { listSkills } = await import('./services/skills.js');
   const status = c.req.query('status') as 'published' | 'scan_passed' | undefined;
   const category = c.req.query('category') || undefined;
-  const orderBy = c.req.query('orderBy') === 'popular' ? 'popular' : 'recent';
-  return c.json({ skills: await listSkills({ status, category, orderBy }) });
+  const orderByRaw = c.req.query('orderBy');
+  const orderBy: 'popular' | 'recent' | 'favorites' =
+    orderByRaw === 'popular' || orderByRaw === 'favorites' ? orderByRaw : 'recent';
+  const userId = c.get('userId');
+  const onlyMine = c.req.query('favoritedByMe') === 'true';
+  return c.json({
+    skills: await listSkills({
+      status,
+      category,
+      orderBy,
+      userId,
+      favoritedBy: onlyMine ? userId : undefined,
+    }),
+  });
 });
 app.get('/api/skills/:id', async (c) => {
   const { getSkill } = await import('./services/skills.js');
-  const skill = await getSkill(c.req.param('id'));
+  const skill = await getSkill(c.req.param('id'), c.get('userId'));
   if (!skill) return c.json({ error: 'not found' }, 404);
   return c.json(skill);
+});
+app.post('/api/skills/:id/favorite', async (c) => {
+  const { toggleFavorite } = await import('./services/skills.js');
+  const result = await toggleFavorite(c.get('userId'), c.req.param('id'));
+  return c.json(result);
 });
 app.post('/api/skills', async (c) => {
   const { publishSkill, PublishSkillSchema } = await import('./services/skills.js');

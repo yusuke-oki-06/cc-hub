@@ -24,6 +24,11 @@ export interface SkillRow {
   scanReport: SkillScanReport | null;
   category: string;
   installCount: number;
+  /** Number of users who favorited this skill (global). */
+  favoriteCount: number;
+  /** Whether the current user has favorited this skill. Only populated when
+   *  a userId is passed to listSkills; null otherwise. */
+  favoritedByMe: boolean | null;
   createdAt: string;
 }
 
@@ -55,73 +60,110 @@ export async function publishSkill(
       status = EXCLUDED.status, scan_report = EXCLUDED.scan_report
     RETURNING id::text, slug, version, title, description,
       author_id::text AS "authorId", status,
-      scan_report AS "scanReport", created_at::text AS "createdAt"
+      scan_report AS "scanReport",
+      category,
+      install_count AS "installCount",
+      0::int AS "favoriteCount",
+      NULL::boolean AS "favoritedByMe",
+      created_at::text AS "createdAt"
   `;
   if (!row) throw new Error('publish failed');
   return row;
 }
 
+export async function toggleFavorite(
+  userId: string,
+  skillId: string,
+): Promise<{ favorited: boolean }> {
+  // Attempt insert; if the row already exists, delete to toggle off.
+  const inserted = await sql<{ ok: number }[]>`
+    INSERT INTO skill_favorites (user_id, skill_id)
+    VALUES (${userId}::uuid, ${skillId}::uuid)
+    ON CONFLICT DO NOTHING
+    RETURNING 1 AS ok
+  `;
+  if (inserted.length > 0) return { favorited: true };
+  await sql`
+    DELETE FROM skill_favorites
+    WHERE user_id = ${userId}::uuid AND skill_id = ${skillId}::uuid
+  `;
+  return { favorited: false };
+}
+
 export async function listSkills(filter?: {
   status?: SkillRow['status'];
   category?: string;
-  orderBy?: 'popular' | 'recent';
+  orderBy?: 'popular' | 'recent' | 'favorites';
+  userId?: string;
+  favoritedBy?: string; // user id — restrict to their favorites only
 }): Promise<SkillRow[]> {
   const orderSql =
     filter?.orderBy === 'popular'
-      ? sql`ORDER BY install_count DESC, created_at DESC`
-      : sql`ORDER BY created_at DESC`;
-  if (filter?.status && filter.category) {
-    return sql<SkillRow[]>`
-      SELECT id::text, slug, version, title, description,
-        author_id::text AS "authorId", status, scan_report AS "scanReport",
-        category, install_count AS "installCount",
-        created_at::text AS "createdAt"
-      FROM skills
-      WHERE status = ${filter.status} AND category = ${filter.category}
-      ${orderSql}
-      LIMIT 100
-    `;
-  }
-  if (filter?.status) {
-    return sql<SkillRow[]>`
-      SELECT id::text, slug, version, title, description,
-        author_id::text AS "authorId", status, scan_report AS "scanReport",
-        category, install_count AS "installCount",
-        created_at::text AS "createdAt"
-      FROM skills WHERE status = ${filter.status}
-      ${orderSql}
-      LIMIT 100
-    `;
-  }
-  if (filter?.category) {
-    return sql<SkillRow[]>`
-      SELECT id::text, slug, version, title, description,
-        author_id::text AS "authorId", status, scan_report AS "scanReport",
-        category, install_count AS "installCount",
-        created_at::text AS "createdAt"
-      FROM skills WHERE category = ${filter.category}
-      ${orderSql}
-      LIMIT 100
-    `;
-  }
+      ? sql`ORDER BY s.install_count DESC, s.created_at DESC`
+      : filter?.orderBy === 'favorites'
+        ? sql`ORDER BY "favoriteCount" DESC, s.created_at DESC`
+        : sql`ORDER BY s.created_at DESC`;
+
+  // Per-user favorited flag. We LEFT JOIN skill_favorites filtered by the
+  // current user's id so every row gets a boolean.
+  const uid = filter?.userId ?? null;
+  const favedMe = uid
+    ? sql`EXISTS (SELECT 1 FROM skill_favorites sf2
+                  WHERE sf2.skill_id = s.id AND sf2.user_id = ${uid}::uuid)`
+    : sql`NULL::boolean`;
+
+  // WHERE clauses composed conditionally.
+  const statusFilter = filter?.status
+    ? sql`AND s.status = ${filter.status}`
+    : sql``;
+  const categoryFilter = filter?.category
+    ? sql`AND s.category = ${filter.category}`
+    : sql``;
+  const favFilter = filter?.favoritedBy
+    ? sql`AND EXISTS (SELECT 1 FROM skill_favorites sfF
+                       WHERE sfF.skill_id = s.id AND sfF.user_id = ${filter.favoritedBy}::uuid)`
+    : sql``;
+
   return sql<SkillRow[]>`
-    SELECT id::text, slug, version, title, description,
-      author_id::text AS "authorId", status, scan_report AS "scanReport",
-      category, install_count AS "installCount",
-      created_at::text AS "createdAt"
-    FROM skills ${orderSql} LIMIT 100
+    SELECT
+      s.id::text,
+      s.slug,
+      s.version,
+      s.title,
+      s.description,
+      s.author_id::text AS "authorId",
+      s.status,
+      s.scan_report AS "scanReport",
+      s.category,
+      s.install_count AS "installCount",
+      COALESCE((SELECT count(*)::int FROM skill_favorites sfC WHERE sfC.skill_id = s.id), 0) AS "favoriteCount",
+      ${favedMe} AS "favoritedByMe",
+      s.created_at::text AS "createdAt"
+    FROM skills s
+    WHERE 1 = 1
+      ${statusFilter}
+      ${categoryFilter}
+      ${favFilter}
+    ${orderSql}
+    LIMIT 100
   `;
 }
 
 export async function getSkill(
   skillId: string,
+  userId?: string,
 ): Promise<(SkillRow & { contentText: string | null }) | null> {
+  const favedMe = userId
+    ? sql`EXISTS (SELECT 1 FROM skill_favorites sf WHERE sf.skill_id = s.id AND sf.user_id = ${userId}::uuid)`
+    : sql`NULL::boolean`;
   const rows = await sql<Array<SkillRow & { content: Buffer }>>`
-    SELECT id::text, slug, version, title, description,
-      author_id::text AS "authorId", status, scan_report AS "scanReport",
-      category, install_count AS "installCount",
-      created_at::text AS "createdAt", content
-    FROM skills WHERE id = ${skillId}::uuid LIMIT 1
+    SELECT s.id::text, s.slug, s.version, s.title, s.description,
+      s.author_id::text AS "authorId", s.status, s.scan_report AS "scanReport",
+      s.category, s.install_count AS "installCount",
+      COALESCE((SELECT count(*)::int FROM skill_favorites sfC WHERE sfC.skill_id = s.id), 0) AS "favoriteCount",
+      ${favedMe} AS "favoritedByMe",
+      s.created_at::text AS "createdAt", s.content
+    FROM skills s WHERE s.id = ${skillId}::uuid LIMIT 1
   `;
   const row = rows[0];
   if (!row) return null;
