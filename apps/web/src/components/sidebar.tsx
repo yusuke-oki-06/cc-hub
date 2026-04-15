@@ -160,7 +160,7 @@ export function Sidebar() {
       </div>
 
       {/* Scrollable body */}
-      <div className="mt-4 flex-1 space-y-4 overflow-y-auto px-3 pb-4">
+      <div className="sidebar-scroll mt-4 flex-1 space-y-4 overflow-y-auto px-3 pb-4">
         {/* Projects */}
         <Section title="プロジェクト" actionHref="/projects" actionLabel="すべて">
           <ul className="space-y-0.5">
