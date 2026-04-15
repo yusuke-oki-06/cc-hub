@@ -193,9 +193,16 @@ export function Sidebar() {
             <NavItem href="/workspace" label="ワークスペース" icon={<IconGrid />} active={isActive('/workspace')} />
             <NavItem href="/wiki" label="Wiki" icon={<IconBook />} active={isActive('/wiki')} />
             <NavItem href="/skills" label="Skills" icon={<IconStar />} active={isActive('/skills')} />
-            <NavItem href="/audit" label="監査ログ" icon={<IconShield />} active={isActive('/audit')} />
+          </nav>
+        </Section>
+
+        {/* Admin-only section. Enforcement is best-effort visual labelling
+            in this single-operator PoC; Phase 2 will add middleware RBAC. */}
+        <Section title="管理">
+          <nav className="space-y-0.5">
             <NavItem href="/profiles" label="プロファイル" icon={<IconSettings />} active={isActive('/profiles')} />
-            <NavItem href="/admin/insights" label="利用状況 (admin)" icon={<IconCrown />} active={isActive('/admin/insights')} />
+            <NavItem href="/audit" label="監査ログ" icon={<IconShield />} active={isActive('/audit')} />
+            <NavItem href="/admin/insights" label="利用状況" icon={<IconCrown />} active={isActive('/admin/insights')} />
           </nav>
         </Section>
       </div>

@@ -34,7 +34,17 @@ export default function ProfilesPage() {
       <Link href="/" className="font-sans text-[13px] text-stone hover:text-olive">
         ← ダッシュボード
       </Link>
-      <h1 className="font-serif text-[40px] leading-[1.1] text-near">Profile</h1>
+      <header className="space-y-2">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#e3d196] bg-[#faf3dd] px-2.5 py-[3px] font-sans text-[11px] text-[#7a5a12]">
+          管理者向け
+        </div>
+        <h1 className="font-serif text-[40px] leading-[1.1] text-near">プロファイル</h1>
+        <p className="font-sans text-[13px] leading-[1.6] text-olive">
+          Claude に許可するツールや 1 セッションの上限を決めるセキュリティ設定です。
+          誤って広すぎる権限を与えると機密情報の流出や意図しないコマンド実行につながるため、
+          編集は管理者のみを想定しています。
+        </p>
+      </header>
       {profiles.map((p) => (
         <Card key={p.id}>
           <CardHeader>
