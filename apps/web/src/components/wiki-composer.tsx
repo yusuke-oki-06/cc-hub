@@ -12,28 +12,34 @@ interface Props {
 
 const PRESETS: Array<{ label: string; title: string; prompt: string }> = [
   {
-    label: '初期化',
-    title: '空の vault に CLAUDE.md / index.md / log.md / skills を書き出す',
+    label: '準備する',
+    title: '空のフォルダに Claude が整理するための枠組みをシード (初回のみ)',
     prompt:
-      '/workspace/wiki/ を見てください。空 vault なら .claude/skills/wiki-ingest (もしあれば wiki-init) を参照しつつ CLAUDE.md / index.md / log.md / concepts/ / entities/ / queries/ の骨組みを作ってください。既にあればスキップしてください。',
+      '/workspace/wiki/ を見てください。空ならば CLAUDE.md / index.md / log.md / concepts/ / entities/ / queries/ の骨組みを作ってください。既にあればスキップして、その旨を報告してください。',
   },
   {
-    label: 'raw を取り込む',
-    title: 'raw/ の未 ingest ファイルを wiki-ingest で一括取り込み',
+    label: '生データを整理',
+    title: 'raw/ の未取り込みファイルを読んで人物・概念・話題ごとにページ化',
     prompt:
       '/workspace/wiki/CLAUDE.md を読んで運用ルールを把握した上で、.claude/skills/wiki-ingest/SKILL.md に従い raw/ 以下で index.md に未登録のファイルを順に ingest してください。各 source につき concepts/ または entities/ を書き、index.md と log.md を更新してください。',
   },
   {
     label: '質問する',
-    title: 'index を参照して citation 付き回答、価値ある答えは queries/ に保存',
+    title: 'Wiki を参照して出典付きで回答。価値ある答えは queries/ に保存',
     prompt:
       '/workspace/wiki/CLAUDE.md を読んだ上で、.claude/skills/wiki-query/SKILL.md に従って次の質問に答えてください: ',
   },
   {
-    label: 'lint',
-    title: 'broken link / orphan / 矛盾をレポート',
+    label: '点検する',
+    title: 'リンク切れ / 迷子ページ / 古い情報 / 矛盾候補をレポートのみ (変更しない)',
     prompt:
-      '/workspace/wiki/ に対して .claude/skills/wiki-lint/SKILL.md の手順で lint を実行してください。レポートを log.md に追記してください。',
+      '/workspace/wiki/ に対して .claude/skills/wiki-lint/SKILL.md の手順で lint を実行してください。ページは一切変更せず、レポートだけを log.md に追記してください。',
+  },
+  {
+    label: '矛盾を修復',
+    title: '食い違うページを自動で書き直し。差分は log.md に記録',
+    prompt:
+      '/workspace/wiki/CLAUDE.md の Lint ルールに沿って全ページをスキャンし、以下の矛盾を検出してください:\n- 同一 entity / concept で A と ¬A の記述が並存\n- frontmatter の sources / updated が食い違う\n\n検出したら:\n1. frontmatter の sources と log.md から**より新しい source** を特定\n2. 新しい側の記述を正として、古い側は「(YYYY-MM-DD 更新で置換)」を注記しつつ Edit で書き直す\n3. 両ページに updated フィールドを付与\n4. log.md に `## [YYYY-MM-DD] reconcile | <page>` エントリを追加 (何を何に置き換えたかを記録)\n\n自信がない (新旧が判断できない、情報が不足) 案件は**修復せず** log.md にレポートだけ残し、ユーザーに確認を促してください。',
   },
 ];
 

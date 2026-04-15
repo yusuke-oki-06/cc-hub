@@ -20,9 +20,35 @@ interface TreeNode {
   children: TreeNode[];
 }
 
+/**
+ * Paths hidden from the user-facing tree. These files are either
+ * Claude maintenance targets (skill definitions, operating instructions)
+ * or append-only history that the user does not edit directly.
+ */
+const HIDDEN_EXACT = new Set(['CLAUDE.md', 'log.md']);
+function isHidden(path: string): boolean {
+  if (HIDDEN_EXACT.has(path)) return true;
+  // Strip every `.claude/` subtree (skills definitions etc.)
+  if (path === '.claude' || path.startsWith('.claude/')) return true;
+  return false;
+}
+
+/** Japanese label that sits next to an English top-level folder name. */
+const FOLDER_HINT: Record<string, string> = {
+  raw: '生データ',
+  concepts: '概念',
+  entities: '固有名詞',
+  queries: '過去の質問',
+};
+/** Japanese label for specific files (key = posix path relative to vault). */
+const FILE_HINT: Record<string, string> = {
+  'index.md': '目次',
+};
+
 function buildTree(entries: TreeEntry[]): TreeNode[] {
   const root: TreeNode = { name: '', path: '', isDir: true, children: [] };
   for (const e of entries.slice().sort((a, b) => a.path.localeCompare(b.path))) {
+    if (isHidden(e.path)) continue;
     const parts = e.path.split('/');
     let cur = root;
     for (let i = 0; i < parts.length; i++) {
@@ -42,7 +68,6 @@ function buildTree(entries: TreeEntry[]): TreeNode[] {
       cur = child;
     }
   }
-  // Sort: directories first, then files; each alphabetically
   function sort(n: TreeNode): void {
     n.children.sort((a, b) => {
       if (a.isDir && !b.isDir) return -1;
@@ -69,13 +94,19 @@ function TreeItem({
   const isMd = !node.isDir && node.name.toLowerCase().endsWith('.md');
   const pad = { paddingLeft: `${8 + depth * 12}px` };
   if (node.isDir) {
+    const hint = depth === 0 ? FOLDER_HINT[node.name] : undefined;
     return (
       <div>
         <div
-          className="truncate font-sans text-[12px] font-medium uppercase tracking-[0.3px] text-stone"
+          className="flex items-baseline gap-1.5 font-sans text-[12px] font-medium uppercase tracking-[0.3px] text-stone"
           style={pad}
         >
-          {node.name}/
+          <span className="truncate">{node.name}/</span>
+          {hint && (
+            <span className="shrink-0 normal-case font-sans text-[11px] tracking-normal text-olive">
+              — {hint}
+            </span>
+          )}
         </div>
         {node.children.map((c) => (
           <TreeItem
@@ -89,13 +120,14 @@ function TreeItem({
       </div>
     );
   }
+  const fileHint = depth === 0 ? FILE_HINT[node.path] : undefined;
   return (
     <button
       onClick={() => isMd && onSelect(node.path)}
       disabled={!isMd}
       style={pad}
       className={
-        'block w-full truncate text-left font-sans text-[13px] transition ' +
+        'flex w-full items-baseline gap-1.5 text-left font-sans text-[13px] transition ' +
         (selectedPath === node.path
           ? 'bg-sand text-near'
           : isMd
@@ -103,7 +135,10 @@ function TreeItem({
             : 'text-stone opacity-60')
       }
     >
-      {node.name}
+      <span className="truncate">{node.name}</span>
+      {fileHint && (
+        <span className="shrink-0 font-sans text-[11px] text-stone">({fileHint})</span>
+      )}
     </button>
   );
 }
@@ -112,7 +147,7 @@ export function WikiTree({ entries, selectedPath, onSelect }: Props) {
   const tree = buildTree(entries);
   if (tree.length === 0) {
     return (
-      <div className="p-4 font-sans text-[12px] text-stone">vault が空です</div>
+      <div className="p-4 font-sans text-[12px] text-stone">まだ何もありません</div>
     );
   }
   return (

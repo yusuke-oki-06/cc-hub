@@ -43,30 +43,38 @@ export function WikiHelp() {
       {open && (
         <div className="space-y-3 border-t border-border-cream px-4 py-3 font-sans text-[13px] leading-[1.6] text-charcoal">
           <p>
-            ここは <b>Obsidian vault</b> を直接 bind-mount した LLM Wiki です。vault は同じ
-            フォルダを Obsidian アプリでも開けるので、Wiki 側の編集と手動編集が共存します。
+            あなた専用の Wiki です。気になる資料を放り込むと、Claude が要点を抜き出して整理し、
+            関連する話題を自動でリンクしてくれます。後から「あの話どこだっけ」と探す手間が減ります。
           </p>
           <div className="grid gap-2 md:grid-cols-2">
             <Step
-              title="1. Source を置く"
-              body="Obsidian Web Clipper で記事を clip すると raw/ にファイルが増えます。手動で raw/*.md を置いてもOK。"
+              title="1. 生データを集める"
+              body="Obsidian Web Clipper で記事を保存すると自動で溜まります。手元の PDF やメモを raw/ に直接置いても OK。"
             />
             <Step
-              title="2. 初期化 (初回のみ)"
-              body="空 vault なら下の「初期化」ボタンで CLAUDE.md / index.md / log.md / skills をシードします。既に入っていればスキップ。"
+              title="2. 準備する (初回だけ)"
+              body="「準備する」ボタンで Claude が使う整理用の枠組みを作ります。すでにあれば何もしません。"
             />
             <Step
-              title="3. raw を取り込む"
-              body="「raw を取り込む」で wiki-ingest skill を起動。Claude が要点抽出 → concepts/ entities/ に structured page を書き、index と log を更新します。"
+              title="3. 生データを整理"
+              body="「生データを整理」で Claude が集めた生データを読み、人物・概念・話題ごとのページに要点を整理します。"
             />
             <Step
-              title="4. 質問・lint"
-              body="「質問する」で index から citation 付き回答。「lint」で broken link / orphan / 矛盾をレポート。"
+              title="4. 質問する"
+              body="「質問する」で Wiki の内容について自然文で問い合わせ。出典ページ付きで回答します。"
+            />
+            <Step
+              title="5. 点検する"
+              body="「点検する」で、どこからも参照されていないページ / リンク切れ / 古くなった情報 / 矛盾候補を一覧レポート (変更はしません)。"
+            />
+            <Step
+              title="6. 矛盾を修復"
+              body="「矛盾を修復」で、食い違うページを Claude が比較し、新しい出典を優先して自動で書き直します。差分は log.md に残るので、何が変わったか後から確認・巻き戻しできます。"
             />
           </div>
           <p className="text-[12px] text-stone">
-            実行すると Claude セッションが起動し、タスク画面に遷移して進行をリアルタイムに見られます。
-            完了後にこの画面に戻ると、グラフとファイルツリーが増えているはずです。
+            ボタンを押すと Claude のチャット画面に移動し、作業をリアルタイムに見られます。
+            終わってこの画面に戻ると、ページとグラフが増えています。
           </p>
         </div>
       )}

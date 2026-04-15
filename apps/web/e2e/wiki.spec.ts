@@ -26,9 +26,19 @@ test.describe('Wiki UI', () => {
     await page.goto('/wiki');
     await expect(page.getByText(/Wiki の使い方/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByPlaceholder(/Wiki に依頼/)).toBeVisible();
-    for (const label of ['初期化', 'raw を取り込む', '質問する', 'lint']) {
+    for (const label of ['準備する', '生データを整理', '質問する', '点検する', '矛盾を修復']) {
       await expect(page.getByRole('button', { name: label })).toBeVisible();
     }
+  });
+
+  test('files tree hides .claude and internal docs', async ({ authedPage: page }) => {
+    await page.goto('/wiki');
+    const filesPanel = page.locator('aside').filter({ hasText: /^files/i }).first();
+    await expect(filesPanel).toBeVisible({ timeout: 10_000 });
+    const text = await filesPanel.innerText();
+    expect(text).not.toMatch(/\.claude/);
+    expect(text).not.toContain('CLAUDE.md');
+    expect(text).not.toContain('log.md');
   });
 
   test('sidebar has Wiki nav entry', async ({ authedPage: page }) => {
