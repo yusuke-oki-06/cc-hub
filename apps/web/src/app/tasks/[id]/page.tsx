@@ -384,7 +384,7 @@ export default function TaskView() {
                 1 個分の隙間で浮かせる。スクロール領域内に sticky で置くこと
                 で常に viewport 下部の固定位置に表示される。 */}
             {!atBottom && timeline.length > 0 && (
-              <div className="pointer-events-none sticky bottom-10 z-10 flex w-full justify-center">
+              <div className="pointer-events-none sticky bottom-24 z-10 flex w-full justify-center">
                 <button
                   type="button"
                   onClick={scrollToBottom}
