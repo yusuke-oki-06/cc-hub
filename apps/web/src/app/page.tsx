@@ -19,6 +19,10 @@ interface Project {
   name: string;
 }
 
+// 既定の「未分類」プロジェクト ID — これ以外が選ばれたときだけ composer に
+// プロジェクトアイコンを出す。
+const UNTAGGED_PROJECT_ID = '00000000-0000-0000-0000-000000000100';
+
 type ChipIcon = 'bulb' | 'pencil' | 'slack' | 'jira' | 'clock';
 
 const SUGGESTIONS: Array<{
@@ -254,33 +258,55 @@ export default function Home() {
               onPickSkill={() => setSkillModal(true)}
               onPickProject={() => setProjectModal(true)}
             />
+            {projectId !== UNTAGGED_PROJECT_ID && (
+              <button
+                type="button"
+                onClick={() => setProjectModal(true)}
+                title={projects.find((p) => p.id === projectId)?.name ?? 'プロジェクト'}
+                aria-label={`プロジェクト: ${projects.find((p) => p.id === projectId)?.name ?? ''}`}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#2f6fbf] text-white transition hover:bg-[#2456a0]"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M2.5 4.2a1 1 0 011-1h3.2l1.2 1.4h4.6a1 1 0 011 1v6.2a1 1 0 01-1 1h-9a1 1 0 01-1-1V4.2z"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    fill="currentColor"
+                    fillOpacity="0.25"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
             {files.length > 0 && (
               <span className="font-sans text-[12px] text-olive">添付 {files.length} 件</span>
             )}
             {gitUrl && (
               <span className="truncate font-sans text-[12px] text-olive">Git 設定済</span>
             )}
-            <ModelPicker value={model} onChange={setModel} />
-            <ModeSelector value={permissionMode} onChange={setPermissionMode} />
           </div>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!prompt.trim() || loading}
-            title={`実行 (⌘Enter) — ${phaseLabel(phase, uploadProgress.index, uploadProgress.total)}`}
-            aria-label="送信"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-terracotta text-ivory transition hover:bg-[#b5573a] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <svg width="14" height="14" viewBox="0 0 16 16" className="animate-spin" aria-hidden="true">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="none" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <ModeSelector value={permissionMode} onChange={setPermissionMode} />
+            <ModelPicker value={model} onChange={setModel} />
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!prompt.trim() || loading}
+              title={`実行 (⌘Enter) — ${phaseLabel(phase, uploadProgress.index, uploadProgress.total)}`}
+              aria-label="送信"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-terracotta text-ivory transition hover:bg-[#b5573a] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" className="animate-spin" aria-hidden="true">
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="none" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
         {mode === 'upload' && (
           <div className="border-t border-border-cream px-4 py-3">
@@ -298,27 +324,6 @@ export default function Home() {
           </div>
         )}
       </Card>
-
-      {/* Subtle project badge directly under the composer. Clicking opens the
-          move-to-project modal so the user can change context without leaving
-          the landing page. */}
-      <div className="mt-2 flex justify-center">
-        <button
-          type="button"
-          onClick={() => setProjectModal(true)}
-          className="inline-flex items-center gap-2 rounded-full px-2 py-0.5 font-sans text-[12px] text-stone transition hover:text-olive"
-          title="プロジェクトを変更"
-        >
-          <span
-            aria-hidden="true"
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: projectColor(projectId) }}
-          />
-          <span>
-            {projects.find((p) => p.id === projectId)?.name ?? '未分類'}
-          </span>
-        </button>
-      </div>
 
       {loading && (
         <Card className="mt-4 border-border-warm bg-parchment/60">
@@ -691,14 +696,6 @@ function ModeSelector({
       )}
     </div>
   );
-}
-
-/** Stable color for a project id — hash → HSL so every project has its own
- *  subtle tone, avoiding a generic folder icon. */
-function projectColor(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return `hsl(${h % 360}, 38%, 58%)`;
 }
 
 /** Returns slash-trigger state if the caret follows a `/` that starts at the
