@@ -1,7 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
-import { cn } from '@/lib/cn';
-import { Button } from '@/components/ui/button';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import {
   CLAUDE_MODELS,
   GUI_PERMISSION_MODES,
@@ -9,6 +7,7 @@ import {
   type GuiPermissionMode,
   type ToolProfile,
 } from '@cc-hub/shared';
+import { SkillPicker } from '@/components/skill-picker';
 
 export interface ComposerSubmit {
   text: string;
@@ -22,35 +21,32 @@ export interface PromptComposerProps {
   variant?: 'new' | 'followup';
   placeholder?: string;
   disabled?: boolean;
+  /** Kept for API compat; per-turn tool override UI は廃止した。 */
   profile?: ToolProfile;
   onSubmit: (payload: ComposerSubmit) => void | Promise<void>;
-  /** 追加のボタン群 (compact / init など) を toolbar 右端に差し込む */
+  /** フォローアップで表示したいショートカット (履歴整理・CLAUDE.md 生成 等)。
+   *  composer の上に行として並ぶ。 */
   extraActions?: React.ReactNode;
-  /** 値がリセットされたことを外から指示したい時 (送信完了などで親が reset) */
+  /** 値をリセットしたい時 (送信完了時など) に親側が数値を bump する。 */
   resetKey?: number;
 }
-
-const MODE_SHORT: Record<GuiPermissionMode, string> = {
-  default: '通常',
-  plan: '計画のみ',
-  acceptEdits: '編集自動承認',
-};
 
 export function PromptComposer({
   variant = 'followup',
   placeholder,
   disabled,
-  profile,
   onSubmit,
   extraActions,
   resetKey,
 }: PromptComposerProps) {
   const [text, setText] = useState('');
-  const [model, setModel] = useState<ClaudeModelId | ''>('');
+  const [model, setModel] = useState<ClaudeModelId>('sonnet');
   const [mode, setMode] = useState<GuiPermissionMode>('default');
-  const [toolsOverride, setToolsOverride] = useState<string[] | null>(null);
-  const [showTools, setShowTools] = useState(false);
   const [sending, setSending] = useState(false);
+  const [skillModal, setSkillModal] = useState(false);
+  const [slash, setSlash] = useState<
+    { start: number; query: string; top: number; left: number } | null
+  >(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -63,9 +59,8 @@ export function PromptComposer({
     try {
       await onSubmit({
         text,
-        model: model || undefined,
+        model,
         permissionMode: mode === 'default' ? undefined : mode,
-        allowedTools: toolsOverride ?? undefined,
       });
       setText('');
     } finally {
@@ -73,226 +68,337 @@ export function PromptComposer({
     }
   };
 
+  const insertSkillSlug = (slug: string, tokenStart: number, tokenLen: number) => {
+    const before = text.slice(0, tokenStart);
+    const after = text.slice(tokenStart + tokenLen);
+    const inserted = `/${slug} `;
+    const next = `${before}${inserted}${after}`;
+    setText(next);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      const caret = before.length + inserted.length;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  };
+
+  const prependSkillSlug = (slug: string) => {
+    const token = `/${slug} `;
+    if (text.startsWith(token)) return;
+    const next = `${token}${text}`;
+    setText(next);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(token.length, token.length);
+    });
+  };
+
   return (
-    <div
-      className={cn(
-        'rounded-[24px] border border-border-warm bg-ivory shadow-whisper theme-airbnb-composer',
-        variant === 'new' ? 'p-0 overflow-hidden' : 'p-0',
-      )}
-    >
-      <textarea
-        ref={textareaRef}
-        rows={variant === 'new' ? 5 : 3}
-        disabled={disabled}
-        className="block w-full resize-none border-0 bg-transparent px-5 pt-4 pb-2 font-sans text-[15px] leading-[1.6] text-near placeholder:text-stone focus:outline-none"
-        placeholder={
-          placeholder ??
-          (variant === 'new'
-            ? '例: この pcap の DNS クエリを要約して、怪しい宛先があれば列挙して'
-            : '例: そのエラーの原因をもう少し詳しく教えて')
-        }
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-            e.preventDefault();
-            void handleSend();
-          }
-        }}
-      />
-
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-cream bg-parchment/40 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Model selector */}
-          <ComposerSelect
-            label="モデル"
-            value={model}
-            onChange={setModel}
-            options={[
-              { value: '', label: '自動 (既定)' },
-              ...CLAUDE_MODELS.map((m) => ({ value: m.id, label: m.label })),
-            ]}
-            title={
-              model
-                ? CLAUDE_MODELS.find((m) => m.id === model)?.blurb
-                : 'profile の既定モデルで実行'
-            }
-          />
-
-          {/* Permission mode */}
-          <ModeToggle value={mode} onChange={setMode} />
-
-          {/* Tool allowlist popover */}
-          {profile && (
-            <ToolsButton
-              profile={profile}
-              override={toolsOverride}
-              setOverride={setToolsOverride}
-              open={showTools}
-              setOpen={setShowTools}
-            />
-          )}
-
+    <div className="space-y-2">
+      {extraActions && (
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
           {extraActions}
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={handleSend}
-            disabled={!text.trim() || sending || disabled}
-          >
-            {sending ? '送信中…' : '送信 (⌘Enter)'}
-          </Button>
+      <div className="overflow-visible rounded-[24px] border border-border-warm bg-ivory shadow-whisper theme-airbnb-composer">
+        <textarea
+          ref={textareaRef}
+          rows={variant === 'new' ? 5 : 3}
+          disabled={disabled}
+          className="block w-full resize-none border-0 bg-transparent px-5 pt-4 pb-2 font-sans text-[15px] leading-[1.6] text-near placeholder:text-stone focus:outline-none"
+          placeholder={placeholder ?? '返信…'}
+          value={text}
+          onChange={(e) => {
+            const v = e.target.value;
+            setText(v);
+            const caret = e.target.selectionStart ?? v.length;
+            setSlash(detectSlashTrigger(v, caret, e.target));
+          }}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              e.preventDefault();
+              void handleSend();
+              return;
+            }
+            if (slash && e.key === 'Enter') e.preventDefault();
+          }}
+          onBlur={() => {
+            window.setTimeout(() => setSlash(null), 120);
+          }}
+        />
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-cream bg-parchment/40 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <PlusMenuSimple onPickSkill={() => setSkillModal(true)} />
+          </div>
+          <div className="flex items-center gap-2">
+            <ModeSelector value={mode} onChange={setMode} />
+            <ModelPicker value={model} onChange={setModel} />
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!text.trim() || sending || !!disabled}
+              title="送信 (⌘Enter)"
+              aria-label="送信"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-terracotta text-ivory transition hover:bg-[#b5573a] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {sending ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" className="animate-spin" aria-hidden="true">
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="none" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Summary row */}
-      {(model || mode !== 'default' || toolsOverride) && (
-        <div className="flex flex-wrap gap-1.5 border-t border-border-cream bg-ivory px-3 py-1.5 font-mono text-[10px] text-stone">
-          {model && <span>model: {model}</span>}
-          {mode !== 'default' && <span>mode: {MODE_SHORT[mode]}</span>}
-          {toolsOverride && <span>tools: {toolsOverride.join(',') || '(なし)'}</span>}
-        </div>
+      {slash && (
+        <SkillPicker
+          variant="inline"
+          query={slash.query}
+          anchor={{ top: slash.top, left: slash.left }}
+          onPick={(s) => {
+            insertSkillSlug(s.slug, slash.start, slash.query.length + 1);
+            setSlash(null);
+          }}
+          onClose={() => setSlash(null)}
+        />
+      )}
+
+      {skillModal && (
+        <SkillPicker
+          variant="modal"
+          onPick={(s) => {
+            prependSkillSlug(s.slug);
+            setSkillModal(false);
+          }}
+          onClose={() => setSkillModal(false)}
+        />
       )}
     </div>
   );
 }
 
-function ComposerSelect<T extends string>({
-  label,
-  value,
-  onChange,
-  options,
-  title,
-}: {
-  label: string;
-  value: T;
-  onChange: (v: T) => void;
-  options: Array<{ value: T; label: string }>;
-  title?: string;
-}) {
-  return (
-    <label
-      className="flex items-center gap-1 rounded-card border border-border-cream bg-white px-1.5 py-0.5"
-      title={title}
-    >
-      <span className="font-sans text-[10px] text-stone">{label}</span>
-      <select
-        className="bg-transparent font-sans text-[12px] text-near focus:outline-none"
-        value={value}
-        onChange={(e) => onChange(e.target.value as T)}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function ModeToggle({
-  value,
-  onChange,
-}: {
-  value: GuiPermissionMode;
-  onChange: (m: GuiPermissionMode) => void;
-}) {
-  return (
-    <div className="flex items-center gap-0 rounded-card border border-border-cream bg-white">
-      {GUI_PERMISSION_MODES.map((m) => (
-        <button
-          key={m.id}
-          type="button"
-          onClick={() => onChange(m.id)}
-          title={m.blurb}
-          className={cn(
-            'px-2 py-[3px] font-sans text-[12px] transition',
-            value === m.id
-              ? 'bg-terracotta text-ivory rounded-card'
-              : 'text-charcoal hover:text-near',
-          )}
-        >
-          {m.label.split(' — ')[0]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ToolsButton({
-  profile,
-  override,
-  setOverride,
-  open,
-  setOpen,
-}: {
-  profile: ToolProfile;
-  override: string[] | null;
-  setOverride: (t: string[] | null) => void;
-  open: boolean;
-  setOpen: (v: boolean) => void;
-}) {
-  const current = override ?? profile.allowedTools;
-  const label =
-    override === null
-      ? `ツール: profile既定 (${profile.allowedTools.length})`
-      : `ツール: ${override.length}選択`;
+function PlusMenuSimple({ onPickSkill }: { onPickSkill: () => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = () => setOpen(false);
+    const t = setTimeout(() => document.addEventListener('click', onDoc), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', onDoc);
+    };
+  }, [open]);
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="rounded-card border border-border-cream bg-white px-2 py-[3px] font-sans text-[12px] text-charcoal hover:bg-sand"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border-warm bg-white text-stone hover:text-charcoal"
+        title="スキルを選ぶ"
+        aria-label="メニューを開く"
       >
-        {label}
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
       </button>
       {open && (
         <div
-          className="absolute bottom-full left-0 z-30 mb-1 w-72 rounded-card border border-border-warm bg-ivory p-3 shadow-whisper"
-          onBlur={() => setOpen(false)}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
         >
-          <div className="mb-2 flex items-center justify-between">
-            <span className="font-sans text-[11px] font-medium text-stone">
-              このターンで許可するツール
-            </span>
-            <button
-              type="button"
-              onClick={() => setOverride(null)}
-              className="font-sans text-[11px] text-stone underline"
-            >
-              既定に戻す
-            </button>
-          </div>
-          <div className="space-y-1">
-            {profile.allowedTools.map((tool) => (
-              <label
-                key={tool}
-                className="flex cursor-pointer items-center gap-2 rounded-card px-1.5 py-0.5 hover:bg-sand"
-              >
-                <input
-                  type="checkbox"
-                  checked={current.includes(tool)}
-                  onChange={(e) => {
-                    const base = override ?? profile.allowedTools;
-                    const next = e.target.checked
-                      ? [...new Set([...base, tool])]
-                      : base.filter((t) => t !== tool);
-                    setOverride(next);
-                  }}
-                />
-                <span className="font-mono text-[12px] text-near">{tool}</span>
-              </label>
-            ))}
-          </div>
-          <p className="mt-2 font-sans text-[10px] text-stone">
-            profile で禁止されているツールは追加できません (ガードレール保護)。
-          </p>
+          <button
+            type="button"
+            onClick={() => {
+              onPickSkill();
+              setOpen(false);
+            }}
+            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left font-sans text-[13px] text-charcoal hover:bg-sand"
+          >
+            <span>スキルを選ぶ</span>
+            <span className="font-mono text-[11px] text-stone">/</span>
+          </button>
         </div>
       )}
     </div>
   );
+}
+
+function ModelPicker({
+  value,
+  onChange,
+}: {
+  value: ClaudeModelId;
+  onChange: (v: ClaudeModelId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = () => setOpen(false);
+    const t = setTimeout(() => document.addEventListener('click', onDoc), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', onDoc);
+    };
+  }, [open]);
+  const current = CLAUDE_MODELS.find((m) => m.id === value) ?? CLAUDE_MODELS[1];
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="inline-flex items-center gap-1 rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
+        title={current.blurb}
+      >
+        <span className="font-medium">{current.label}</span>
+        <span aria-hidden="true" className="text-stone">▾</span>
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-full z-30 mt-1 w-60 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
+        >
+          {CLAUDE_MODELS.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => {
+                onChange(m.id);
+                setOpen(false);
+              }}
+              className={
+                'flex w-full items-start gap-2 px-3 py-2 text-left font-sans text-[12px] hover:bg-sand ' +
+                (m.id === value ? 'bg-ivory' : '')
+              }
+            >
+              <span className="mt-0.5 font-medium text-near">{m.label}</span>
+              <span className="font-sans text-[11px] text-stone">{m.blurb}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MODE_ICONS: Record<GuiPermissionMode, JSX.Element> = {
+  default: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M3 4h10a1 1 0 011 1v5a1 1 0 01-1 1H6l-3 3V5a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  ),
+  plan: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="4" y="3" width="8" height="11" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6 6h4M6 9h4M6 12h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ),
+  acceptEdits: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M9 2L3 9h4l-1 5 6-7H8l1-5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  ),
+};
+
+function ModeSelector({
+  value,
+  onChange,
+}: {
+  value: GuiPermissionMode;
+  onChange: (v: GuiPermissionMode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = () => setOpen(false);
+    const t = setTimeout(() => document.addEventListener('click', onDoc), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', onDoc);
+    };
+  }, [open]);
+  const current = GUI_PERMISSION_MODES.find((m) => m.id === value) ?? GUI_PERMISSION_MODES[0];
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
+        title={current.blurb}
+      >
+        <span className="text-stone">{MODE_ICONS[current.id]}</span>
+        <span className="font-medium">{current.label}</span>
+        <span aria-hidden="true" className="text-stone">▾</span>
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
+        >
+          {GUI_PERMISSION_MODES.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => {
+                onChange(m.id);
+                setOpen(false);
+              }}
+              className={
+                'flex w-full items-start gap-2 px-3 py-2 text-left font-sans text-[12px] hover:bg-sand ' +
+                (m.id === value ? 'bg-ivory' : '')
+              }
+            >
+              <span className="mt-0.5 shrink-0 text-stone">{MODE_ICONS[m.id]}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium text-near">{m.label}</span>
+                <span className="block font-sans text-[11px] text-stone">{m.blurb}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function detectSlashTrigger(
+  text: string,
+  caret: number,
+  el: HTMLTextAreaElement,
+): { start: number; query: string; top: number; left: number } | null {
+  let i = caret - 1;
+  while (i >= 0) {
+    const ch = text[i];
+    if (ch === '/') {
+      const before = i === 0 ? '\n' : text[i - 1];
+      if (!before || /\s/.test(before)) {
+        const query = text.slice(i + 1, caret);
+        if (/\s/.test(query)) return null;
+        const rect = el.getBoundingClientRect();
+        return { start: i, query, top: rect.bottom + 4, left: rect.left };
+      }
+      return null;
+    }
+    if (/\s/.test(ch ?? '')) return null;
+    i -= 1;
+  }
+  return null;
 }
