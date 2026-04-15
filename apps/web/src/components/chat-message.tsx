@@ -2,7 +2,20 @@
 import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { SiSlack, SiJira, SiConfluence, SiGmail } from 'react-icons/si';
 import type { FriendlyItem } from '@/lib/render/friendly';
+
+/** ツール名から SaaS ブランドを識別する。 `summarizeToolCall` が
+ *  `${service}: ${action}` 形式にしているのでそのまま prefix で見る。 */
+type Brand = { key: 'slack' | 'jira' | 'confluence' | 'gmail'; label: string; color: string; icon: React.ReactNode };
+function detectBrand(title: string): Brand | null {
+  const low = title.toLowerCase();
+  if (/slack/.test(low)) return { key: 'slack', label: 'Slack', color: '#4A154B', icon: <SiSlack size={13} /> };
+  if (/jira/.test(low)) return { key: 'jira', label: 'Jira', color: '#0052CC', icon: <SiJira size={13} /> };
+  if (/confluence/.test(low)) return { key: 'confluence', label: 'Confluence', color: '#172B4D', icon: <SiConfluence size={13} /> };
+  if (/gmail/.test(low)) return { key: 'gmail', label: 'Gmail', color: '#EA4335', icon: <SiGmail size={13} /> };
+  return null;
+}
 
 interface Props {
   item: FriendlyItem;
@@ -42,6 +55,10 @@ export function ChatMessage({ item, renderInline }: Props) {
   }
 
   if (item.kind === 'tool.running') {
+    const brand = detectBrand(item.title);
+    if (brand) {
+      return <BrandToolRunning item={item} brand={brand} />;
+    }
     return (
       <div className="flex items-center gap-2 pl-1 pr-2 py-1 font-sans text-[12.5px] text-stone">
         <Dot pulsing />
@@ -51,6 +68,10 @@ export function ChatMessage({ item, renderInline }: Props) {
   }
 
   if (item.kind === 'tool.finished') {
+    const brand = detectBrand(item.title);
+    if (brand) {
+      return <BrandToolFinished item={item} brand={brand} />;
+    }
     return <ToolFinishedLine item={item} />;
   }
 
@@ -239,6 +260,66 @@ function CopyGlyph() {
       <rect x="4" y="4" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.25" />
       <path d="M2 10V3.5A1.5 1.5 0 0 1 3.5 2H10" stroke="currentColor" strokeWidth="1.25" />
     </svg>
+  );
+}
+
+/** Slack / Jira / Confluence / Gmail の MCP ツール呼び出し中カード。
+ *  ブランドアイコン + ブランドカラーの左アクセントラインでひと目で連携を示す。 */
+function BrandToolRunning({ item, brand }: { item: FriendlyItem; brand: Brand }) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-card border border-border-cream bg-white px-2 py-1.5 font-sans text-[12.5px]"
+      style={{ borderLeft: `3px solid ${brand.color}` }}
+    >
+      <span
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded"
+        style={{ color: brand.color }}
+        aria-hidden="true"
+      >
+        {brand.icon}
+      </span>
+      <span className="truncate text-charcoal">{item.title}</span>
+      <Dot pulsing />
+    </div>
+  );
+}
+
+/** Slack / Jira / Confluence / Gmail の MCP ツール完了カード。 */
+function BrandToolFinished({ item, brand }: { item: FriendlyItem; brand: Brand }) {
+  const [open, setOpen] = useState(false);
+  const payload = item.data as { is_error?: boolean } | undefined;
+  const err = payload?.is_error === true;
+  return (
+    <div
+      className="rounded-card border border-border-cream bg-white font-sans text-[12.5px]"
+      style={{ borderLeft: `3px solid ${brand.color}` }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-parchment/60"
+      >
+        <span
+          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded"
+          style={{ color: brand.color }}
+          aria-hidden="true"
+        >
+          {brand.icon}
+        </span>
+        <span className={err ? 'text-error-crimson' : 'text-charcoal'}>
+          {item.title}
+        </span>
+        {item.meta && (
+          <span className="ml-auto shrink-0 font-mono text-[11px] text-stone">{item.meta}</span>
+        )}
+        <span className="shrink-0 text-[10px] text-stone">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && item.body && (
+        <pre className="mt-0 ml-9 mb-2 max-h-[220px] overflow-y-auto whitespace-pre-wrap rounded-[8px] border border-border-cream bg-parchment p-2 font-mono text-[11px] leading-[1.55] text-olive">
+          {item.body}
+        </pre>
+      )}
+    </div>
   );
 }
 
