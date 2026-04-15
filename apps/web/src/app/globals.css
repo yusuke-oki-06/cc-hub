@@ -152,6 +152,18 @@ td {
 [data-theme='airbnb'] .shadow-ring {
   box-shadow: 0 0 0 1px #ebebeb;
 }
+/* Override the Tailwind arbitrary-class outlines so primary buttons and
+   sidebar rings pick up the Rausch coral / foggy grey under airbnb. The
+   class selectors are the JIT-escaped form of the arbitrary utility. */
+[data-theme='airbnb'] .shadow-\[0_0_0_1px_\#c96442\] {
+  box-shadow: 0 0 0 1px #ff385c;
+}
+[data-theme='airbnb'] .shadow-\[0_0_0_1px_\#d1cfc5\] {
+  box-shadow: 0 0 0 1px #dddddd;
+}
+[data-theme='airbnb'] .ring-terracotta\/40 {
+  --tw-ring-color: rgba(255, 56, 92, 0.4);
+}
 [data-theme='airbnb'] .rounded-card {
   border-radius: 16px;
 }
@@ -187,8 +199,8 @@ td {
   font-weight: 800;
   letter-spacing: -0.035em;
 }
-/* Backdrop for composer under airbnb becomes a floating pill */
-[data-theme='airbnb'] .shadow-whisper {
+/* Composer-only pill backdrop (narrow scope — NOT applied to every Card). */
+[data-theme='airbnb'] .theme-airbnb-composer {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
   border-radius: 32px;
 }

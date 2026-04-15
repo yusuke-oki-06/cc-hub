@@ -132,7 +132,7 @@ export default function Home() {
       </header>
 
       {/* Big prompt composer */}
-      <Card className="overflow-hidden p-0 shadow-whisper">
+      <Card className="overflow-hidden p-0 shadow-whisper theme-airbnb-composer">
         <textarea
           rows={5}
           className="block w-full resize-none border-0 bg-transparent px-5 pt-5 pb-2 font-sans text-[16px] leading-[1.6] text-near placeholder:text-stone focus:outline-none"
