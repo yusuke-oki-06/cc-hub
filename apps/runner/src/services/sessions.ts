@@ -70,6 +70,16 @@ export async function createSession(input: CreateSessionInput): Promise<ActiveSe
 
   const mcp = await getMcpForProfile(input.profile.id);
 
+  // If an Obsidian vault is configured on the host, expose it inside every
+  // container at /workspace/wiki so Claude can read/write the Wiki using the
+  // usual Read/Write/Edit tools. The mount is rw because the LLM Wiki pattern
+  // requires the LLM to maintain the wiki pages.
+  const vaultPath = process.env.CC_HUB_VAULT_PATH;
+  const extraBinds: string[] = [];
+  if (vaultPath && existsSync(vaultPath)) {
+    extraBinds.push(`${vaultPath}:/workspace/wiki:rw`);
+  }
+
   const sandbox = await createSandbox({
     sessionId,
     profileId: input.profile.id,
@@ -81,6 +91,7 @@ export async function createSession(input: CreateSessionInput): Promise<ActiveSe
     cpuCount: 2,
     diskSizeMb: 10_240,
     extraEnv: collectMcpEnv(mcp),
+    extraBinds: extraBinds.length > 0 ? extraBinds : undefined,
   });
 
   // Inject .mcp.json + .claude/settings.local.json into workspace

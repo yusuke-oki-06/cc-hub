@@ -16,6 +16,7 @@
     "@cc-hub/shared": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "dockerode": "^4.0.7",
+    "gray-matter": "^4.0.3",
     "hono": "^4.6.14",
     "langfuse": "^3.37.0",
     "postgres": "^3.4.5",

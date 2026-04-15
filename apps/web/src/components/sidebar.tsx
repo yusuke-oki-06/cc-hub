@@ -190,6 +190,7 @@ export function Sidebar() {
         <Section title="ツール">
           <nav className="space-y-0.5">
             <NavItem href="/workspace" label="ワークスペース" icon={<IconGrid />} active={isActive('/workspace')} />
+            <NavItem href="/wiki" label="Wiki" icon={<IconBook />} active={isActive('/wiki')} />
             <NavItem href="/skills" label="Skills" icon={<IconStar />} active={isActive('/skills')} />
             <NavItem href="/audit" label="監査ログ" icon={<IconShield />} active={isActive('/audit')} />
             <NavItem href="/profiles" label="プロファイル" icon={<IconSettings />} active={isActive('/profiles')} />
@@ -328,6 +329,18 @@ function IconFolder({ className = '' }: { className?: string }) {
         d="M2 4.5C2 3.67 2.67 3 3.5 3h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z"
         stroke="currentColor"
         strokeWidth="1.2"
+      />
+    </svg>
+  );
+}
+function IconBook({ className = '' }: { className?: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={className}>
+      <path
+        d="M3 3h4.5a2 2 0 0 1 2 2v7.5M13 3H8.5a2 2 0 0 0-2 2v7.5M3 3v9.5h4.5M13 3v9.5H8.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
       />
     </svg>
   );

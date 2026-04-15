@@ -17,6 +17,9 @@ const Env = z.object({
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
   WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
+  // Obsidian vault path on the host. When set, the runner exposes /api/wiki
+  // and bind-mounts it into every session at /workspace/wiki (rw).
+  CC_HUB_VAULT_PATH: z.string().optional(),
 });
 
 export const config = Env.parse(process.env);

@@ -42,6 +42,15 @@ import {
   McpIntegrationSchema,
 } from './services/mcp.js';
 import { startSessionTrace, langfuseDeepLink } from './observability/langfuse.js';
+import {
+  resolveVaultPath,
+  scanTree,
+  readPage,
+  buildGraph,
+  countPages,
+  initVault,
+  resolveSeedDir,
+} from './services/wiki.js';
 import * as tar from 'tar-stream';
 import { PassThrough } from 'node:stream';
 import Docker from 'dockerode';
@@ -838,6 +847,58 @@ app.post('/api/skills/:id/install', async (c) => {
     skillId: c.req.param('id'),
   });
   return c.json({ ok: true });
+});
+
+// ---------- Wiki (Obsidian-backed LLM Wiki) ----------
+app.get('/api/wiki/config', async (c) => {
+  const vaultPath = resolveVaultPath();
+  if (!vaultPath) {
+    return c.json({
+      enabled: false,
+      hint: 'Set CC_HUB_VAULT_PATH in apps/runner/.env.local to enable.',
+    });
+  }
+  const pageCount = countPages(vaultPath);
+  const initialized = pageCount > 0;
+  return c.json({ enabled: true, vaultPath, pageCount, initialized });
+});
+
+app.get('/api/wiki/tree', async (c) => {
+  const vaultPath = resolveVaultPath();
+  if (!vaultPath) return c.json({ error: 'vault not configured' }, 503);
+  const entries = await scanTree(vaultPath);
+  return c.json({ entries });
+});
+
+app.get('/api/wiki/page', async (c) => {
+  const vaultPath = resolveVaultPath();
+  if (!vaultPath) return c.json({ error: 'vault not configured' }, 503);
+  const path = c.req.query('path');
+  if (!path) return c.json({ error: 'path query required' }, 400);
+  try {
+    const page = await readPage(vaultPath, path);
+    return c.json(page);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 404);
+  }
+});
+
+app.get('/api/wiki/graph', async (c) => {
+  const vaultPath = resolveVaultPath();
+  if (!vaultPath) return c.json({ error: 'vault not configured' }, 503);
+  const graph = await buildGraph(vaultPath);
+  return c.json(graph);
+});
+
+app.post('/api/wiki/init', async (c) => {
+  const vaultPath = resolveVaultPath();
+  if (!vaultPath) return c.json({ error: 'vault not configured' }, 503);
+  try {
+    const result = await initVault(vaultPath, resolveSeedDir());
+    return c.json(result);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 500);
+  }
 });
 
 // ---------- Dev helpers ----------
