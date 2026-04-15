@@ -102,6 +102,31 @@ td {
   color: var(--primary);
 }
 
+/* Claude.ai-style assistant bubble prose spacing */
+.assistant-prose > :first-child { margin-top: 0; }
+.assistant-prose > :last-child { margin-bottom: 0; }
+.assistant-prose p { margin: 0.6em 0; }
+.assistant-prose h1, .assistant-prose h2, .assistant-prose h3 { margin: 1.2em 0 0.4em; font-weight: 600; }
+.assistant-prose h1 { font-size: 1.3em; }
+.assistant-prose h2 { font-size: 1.15em; }
+.assistant-prose h3 { font-size: 1.05em; }
+.assistant-prose ul, .assistant-prose ol { margin: 0.5em 0 0.5em 1.25em; }
+.assistant-prose li { margin: 0.2em 0; }
+.assistant-prose blockquote {
+  border-left: 3px solid var(--ring);
+  padding-left: 1em;
+  margin: 0.6em 0;
+  color: var(--text-muted);
+}
+.assistant-prose hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+.assistant-prose table { border-collapse: collapse; margin: 0.6em 0; }
+.assistant-prose th, .assistant-prose td {
+  border: 1px solid var(--border);
+  padding: 0.3em 0.6em;
+  font-size: 0.95em;
+}
+.assistant-prose th { background: var(--surface); font-weight: 600; }
+
 /* ─── Airbnb theme overrides ────────────────────────────────────────────
    The existing Parchment-flavored Tailwind utility classes
    (bg-parchment / bg-sand / bg-terracotta / border-ring-warm / ...)

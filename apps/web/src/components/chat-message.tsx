@@ -1,0 +1,257 @@
+'use client';
+import { useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { FriendlyItem } from '@/lib/render/friendly';
+
+interface Props {
+  item: FriendlyItem;
+  /** render children for permission cards etc. */
+  renderInline?: (item: FriendlyItem) => React.ReactNode;
+}
+
+/**
+ * Claude.ai-style chat message row.
+ *  - user  → right-aligned soft pill (max 680px, rounded-[20px])
+ *  - assistant → no bubble, just text with a subtle "Claude" label and
+ *    markdown rendering; copy button appears on hover
+ *  - tool.running → compact inline muted line with dot spinner
+ *  - tool.finished → compact inline muted line, expandable via details
+ *  - result.success → inline small success stripe
+ *  - result.failure → inline small error stripe
+ *  - system / progress / guardrail / budget / saas_link → CLI-style muted line
+ */
+export function ChatMessage({ item, renderInline }: Props) {
+  if (item.kind === 'hidden') return null;
+  if (item.kind === 'permission' && renderInline) {
+    return <div className="my-1">{renderInline(item)}</div>;
+  }
+
+  if (item.kind === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[680px] rounded-[20px] bg-sand px-4 py-2.5 font-sans text-[14px] leading-[1.55] text-near whitespace-pre-wrap">
+          {item.body || item.title}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.kind === 'assistant') {
+    return <AssistantBubble item={item} />;
+  }
+
+  if (item.kind === 'tool.running') {
+    return (
+      <div className="flex items-center gap-2 pl-1 pr-2 py-1 font-sans text-[12.5px] text-stone">
+        <Dot pulsing />
+        <span className="truncate">{item.title}</span>
+      </div>
+    );
+  }
+
+  if (item.kind === 'tool.finished') {
+    return <ToolFinishedLine item={item} />;
+  }
+
+  if (item.kind === 'result.success') {
+    return (
+      <div className="flex items-start gap-2 border-l-2 border-[#c9d9ab] py-1 pl-3">
+        <span className="mt-[2px] text-[11px] text-[#6b8a3e]">●</span>
+        <div className="min-w-0 flex-1">
+          <div className="font-sans text-[13px] font-medium text-[#4b6a2a]">
+            {item.title}
+          </div>
+          {item.body && (
+            <div className="mt-1 whitespace-pre-wrap font-sans text-[13px] leading-[1.6] text-charcoal">
+              {item.body}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.kind === 'result.failure') {
+    return (
+      <div className="flex items-start gap-2 border-l-2 border-[#e0a9a9] py-1 pl-3">
+        <span className="mt-[2px] text-[11px] text-error-crimson">●</span>
+        <div className="min-w-0 flex-1">
+          <div className="font-sans text-[13px] font-medium text-error-crimson">
+            {item.title}
+          </div>
+          {item.body && (
+            <div className="mt-1 whitespace-pre-wrap font-sans text-[13px] leading-[1.6] text-charcoal">
+              {item.body}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.kind === 'guardrail' || item.kind === 'budget') {
+    return (
+      <div className="flex items-start gap-2 border-l-2 border-[#e3d196] py-1 pl-3 font-sans text-[12.5px] text-[#7a5a12]">
+        <span className="mt-[1px]">■</span>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">{item.title}</div>
+          {item.body && <div className="mt-0.5 text-[12px] text-olive">{item.body}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.kind === 'saas_link') {
+    return (
+      <div className="px-2 py-1 font-sans text-[12.5px] text-terracotta">
+        {item.title}
+      </div>
+    );
+  }
+
+  if (item.kind === 'progress') {
+    return (
+      <div className="flex items-center gap-2 px-2 py-1 font-sans text-[12px] italic text-stone">
+        <Dot pulsing />
+        <span>{item.title}</span>
+      </div>
+    );
+  }
+
+  // system: subtle mono one-liner (stderr, rate_limit, parse_error)
+  return (
+    <div className="flex items-baseline gap-2 px-2 py-[2px] font-mono text-[11.5px] text-stone">
+      {item.meta && <span className="shrink-0 text-[10px]">{item.meta}</span>}
+      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+    </div>
+  );
+}
+
+function AssistantBubble({ item }: { item: FriendlyItem }) {
+  const [copied, setCopied] = useState(false);
+  const text = item.body ?? item.title ?? '';
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // noop
+    }
+  };
+  return (
+    <div className="group relative pl-1 pr-8">
+      <div className="mb-1 font-sans text-[11px] uppercase tracking-[0.5px] text-stone">
+        Claude
+      </div>
+      <div className="font-sans text-[14.5px] leading-[1.7] text-near assistant-prose">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            a: ({ href, children }) => (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-terracotta underline underline-offset-2"
+              >
+                {children}
+              </a>
+            ),
+            code: ({ className, children }) => {
+              const isBlock = /language-/.test(className ?? '');
+              if (isBlock) return <code className={className}>{children}</code>;
+              return (
+                <code className="rounded bg-parchment px-1 py-[1px] font-mono text-[12px]">
+                  {children}
+                </code>
+              );
+            },
+            pre: ({ children }) => (
+              <pre className="my-3 overflow-x-auto rounded-[12px] border border-border-cream bg-parchment p-3 font-mono text-[12px] leading-[1.55]">
+                {children}
+              </pre>
+            ),
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      </div>
+      <button
+        onClick={onCopy}
+        title="コピー"
+        className="absolute right-0 top-5 rounded-full border border-border-cream bg-ivory p-1.5 text-[11px] text-stone opacity-0 transition hover:text-charcoal group-hover:opacity-100"
+        aria-label="メッセージをコピー"
+      >
+        {copied ? '✓' : <CopyGlyph />}
+      </button>
+    </div>
+  );
+}
+
+function ToolFinishedLine({ item }: { item: FriendlyItem }) {
+  const [open, setOpen] = useState(false);
+  const payload = item.data as { is_error?: boolean } | undefined;
+  const err = payload?.is_error === true;
+  return (
+    <div className="font-sans text-[12.5px]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex max-w-full items-center gap-2 rounded-full px-2 py-1 text-left transition hover:bg-parchment"
+      >
+        <span className={`text-[11px] ${err ? 'text-error-crimson' : 'text-[#6b8a3e]'}`}>●</span>
+        <span className={err ? 'text-error-crimson' : 'text-stone'}>
+          {item.title}
+        </span>
+        {item.meta && (
+          <span className="truncate font-mono text-[11px] text-stone">· {item.meta}</span>
+        )}
+        <span className="ml-1 text-[10px] text-stone">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && item.body && (
+        <pre className="mt-1 ml-4 max-h-[220px] overflow-y-auto whitespace-pre-wrap rounded-[8px] border border-border-cream bg-parchment p-2 font-mono text-[11px] leading-[1.55] text-olive">
+          {item.body}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function Dot({ pulsing = false }: { pulsing?: boolean }) {
+  return (
+    <span className="relative inline-flex h-1.5 w-1.5 items-center justify-center">
+      <span
+        className={
+          'absolute inset-0 rounded-full bg-terracotta ' +
+          (pulsing ? 'animate-ping opacity-60' : '')
+        }
+      />
+      <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-terracotta" />
+    </span>
+  );
+}
+
+function CopyGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="4" y="4" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M2 10V3.5A1.5 1.5 0 0 1 3.5 2H10" stroke="currentColor" strokeWidth="1.25" />
+    </svg>
+  );
+}
+
+/** Thinking indicator placed after the last message while Claude is working. */
+export function ChatThinking() {
+  return (
+    <div className="flex items-center gap-2 pl-1 py-2 font-sans text-[13px] text-olive">
+      <span className="inline-flex gap-[3px]">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.3s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.15s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta" />
+      </span>
+      <span className="text-stone">Claude が考えています…</span>
+    </div>
+  );
+}

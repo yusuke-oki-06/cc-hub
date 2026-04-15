@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { subscribeSession } from '@/lib/sse';
 import { buildTimeline, type FriendlyItem } from '@/lib/render/friendly';
 import { PromptComposer, type ComposerSubmit } from '@/components/prompt-composer';
+import { ChatMessage, ChatThinking } from '@/components/chat-message';
 import type { SseEvent, ToolProfile } from '@cc-hub/shared';
 
 interface Task {
@@ -229,28 +230,26 @@ export default function TaskView() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
-        {/* Main column: timeline + composer */}
-        <section className="space-y-4">
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <CardTitle>会話</CardTitle>
-              <span className="font-sans text-[12px] text-stone">
-                {timeline.length} messages
-              </span>
-            </CardHeader>
-            <div ref={listRef} className="max-h-[64vh] overflow-y-auto space-y-3 pr-1">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_300px]">
+        {/* Main column: timeline + composer (Claude.ai-style, narrow reading width) */}
+        <section className="mx-auto w-full max-w-[760px] space-y-4">
+          <div ref={listRef} className="max-h-[68vh] overflow-y-auto pr-2">
+            <div className="space-y-4 py-2">
               {timeline.map((it) => (
-                <FriendlyRow key={it.seq} item={it} sessionId={sessionId} />
+                <ChatMessage
+                  key={it.seq}
+                  item={it}
+                  renderInline={(i) => <PermissionInlineCard item={i} sessionId={sessionId} />}
+                />
               ))}
-              <ThinkingIndicator timeline={timeline} isRunning={isRunning} />
+              {isRunning && showThinking(timeline) && <ChatThinking />}
               {timeline.length === 0 && !isRunning && !sessionId && (
                 <div className="py-10 text-center font-sans text-[13px] text-stone">
                   セッションを準備中…
                 </div>
               )}
             </div>
-          </Card>
+          </div>
 
           {/* Composer */}
           <PromptComposer
@@ -338,27 +337,15 @@ export default function TaskView() {
   );
 }
 
-function ThinkingIndicator({
-  timeline,
-  isRunning,
-}: {
-  timeline: FriendlyItem[];
-  isRunning: boolean;
-}) {
-  if (!isRunning) return null;
+// Whether to show the thinking indicator — suppress when the last event is
+// already a terminal result or an active tool (where the tool line itself
+// doubles as a "working" affordance).
+function showThinking(timeline: FriendlyItem[]): boolean {
   const last = timeline[timeline.length - 1];
-  if (last?.kind === 'result.success' || last?.kind === 'result.failure') return null;
-  if (last?.kind === 'tool.running') return null;
-  return (
-    <div className="flex items-center gap-2 rounded-card border border-border-cream bg-ivory px-4 py-3">
-      <span className="inline-flex gap-[3px]">
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.3s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.15s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta" />
-      </span>
-      <span className="font-sans text-[13px] text-olive">Claude が考えています…</span>
-    </div>
-  );
+  if (!last) return true;
+  if (last.kind === 'result.success' || last.kind === 'result.failure') return false;
+  if (last.kind === 'tool.running') return false;
+  return true;
 }
 
 function ShortcutButton({
@@ -385,54 +372,6 @@ function ShortcutButton({
   );
 }
 
-function FriendlyRow({
-  item,
-  sessionId,
-}: {
-  item: FriendlyItem;
-  sessionId: string | null;
-}) {
-  if (item.kind === 'permission') {
-    return <PermissionInlineCard item={item} sessionId={sessionId} />;
-  }
-  // 「system」行は小さく、罫線も背景もなし。CLI の補助情報として薄く流す。
-  if (item.kind === 'system') {
-    return (
-      <div className="flex items-baseline gap-2 px-2 py-1 font-mono text-[11.5px] text-stone">
-        {item.meta && <span className="shrink-0 text-[10px]">{item.meta}</span>}
-        <span className="min-w-0 flex-1 truncate">{item.title}</span>
-      </div>
-    );
-  }
-  const kinds: Record<FriendlyItem['kind'], string> = {
-    user: 'bg-sand border-ring-warm',
-    assistant: 'bg-ivory border-border-cream',
-    'tool.running': 'bg-[#f7f6ee] border-border-cream text-olive',
-    'tool.finished': 'bg-[#f2f6e8] border-[#c9d9ab]',
-    permission: 'bg-[#f9e8dc] border-[#e4b89a]',
-    'result.success': 'bg-[#eaf1df] border-[#c9d9ab]',
-    'result.failure': 'bg-[#fbeaea] border-[#e0a9a9]',
-    guardrail: 'bg-[#faf3dd] border-[#e3d196]',
-    budget: 'bg-[#faf3dd] border-[#e3d196]',
-    saas_link: 'bg-[#f1ece2] border-ring-warm',
-    progress: 'bg-parchment border-border-cream text-olive italic',
-    system: '',
-    hidden: '',
-  };
-  return (
-    <div className={`rounded-card border px-4 py-3 ${kinds[item.kind] ?? ''}`}>
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="font-sans text-[14px] font-medium text-near">{item.title}</div>
-        {item.meta && <div className="shrink-0 font-mono text-[11px] text-stone">{item.meta}</div>}
-      </div>
-      {item.body && (
-        <div className="mt-2 whitespace-pre-wrap font-sans text-[13px] leading-[1.7] text-charcoal">
-          {item.body}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function PermissionInlineCard({
   item,

@@ -76,7 +76,7 @@ export function PromptComposer({
   return (
     <div
       className={cn(
-        'rounded-card border border-border-warm bg-ivory shadow-whisper',
+        'rounded-[24px] border border-border-warm bg-ivory shadow-whisper theme-airbnb-composer',
         variant === 'new' ? 'p-0 overflow-hidden' : 'p-0',
       )}
     >
