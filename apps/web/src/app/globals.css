@@ -108,6 +108,27 @@ td {
   scrollbar-width: thin;
 }
 
+/* Landing の suggestion chip 登場アニメ:
+   左からフェードインしつつ、わずかに上下に揺れて「波打つ」印象を付ける。
+   各チップに style={{ animationDelay }} を与えてリレー式に走らせる想定。 */
+@keyframes chip-wave-in {
+  0%   { opacity: 0; transform: translate3d(-24px, 0, 0); }
+  55%  { opacity: 1; transform: translate3d(0, -4px, 0); }
+  80%  { transform: translate3d(0, 1px, 0); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.chip-wave-in {
+  opacity: 0;
+  animation: chip-wave-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip-wave-in {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* Ring focus */
 *:focus-visible {
   outline: none;

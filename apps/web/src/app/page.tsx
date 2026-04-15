@@ -361,15 +361,16 @@ export default function Home() {
         />
       )}
 
-      {/* Suggestion chips (claude.ai-style, with icons) */}
+      {/* Suggestion chips (claude.ai-style, with icons).
+          Each chip fades in from the left with a small bounce; staggered
+          delays make the row look like it rolls in with a gentle wave. */}
       <section className="mt-4 flex flex-wrap justify-center gap-2">
-        {SUGGESTIONS.map((s) =>
-          s.href ? (
-            <a
-              key={s.title}
-              href={s.href}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring"
-            >
+        {SUGGESTIONS.map((s, i) => {
+          const chipClass =
+            'chip-wave-in inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring';
+          const chipStyle = { animationDelay: `${i * 90}ms` };
+          return s.href ? (
+            <a key={s.title} href={s.href} className={chipClass} style={chipStyle}>
               <ChipIconSvg name={s.icon} />
               {s.title}
             </a>
@@ -378,13 +379,14 @@ export default function Home() {
               key={s.title}
               onClick={() => s.prompt && setPrompt(s.prompt)}
               title={s.prompt}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring"
+              className={chipClass}
+              style={chipStyle}
             >
               <ChipIconSvg name={s.icon} />
               {s.title}
             </button>
-          ),
-        )}
+          );
+        })}
       </section>
     </div>
   );
