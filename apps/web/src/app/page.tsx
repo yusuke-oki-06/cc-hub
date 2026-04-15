@@ -259,12 +259,12 @@ export default function Home() {
               onPickProject={() => setProjectModal(true)}
             />
             {projectId !== UNTAGGED_PROJECT_ID && (
-              <div className="group relative inline-flex items-center gap-1">
+              <div className="group relative inline-flex h-7 items-stretch overflow-hidden rounded-md border border-[#2f6fbf]">
                 <button
                   type="button"
                   onClick={() => setProjectModal(true)}
                   aria-label={`プロジェクト: ${projects.find((p) => p.id === projectId)?.name ?? ''}`}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#2f6fbf] text-white transition hover:bg-[#2456a0]"
+                  className="inline-flex w-7 items-center justify-center bg-[#2f6fbf] text-white transition hover:bg-[#2456a0]"
                 >
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path
@@ -281,7 +281,7 @@ export default function Home() {
                   type="button"
                   onClick={() => setProjectId(UNTAGGED_PROJECT_ID)}
                   aria-label="プロジェクトを解除"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#2f6fbf] text-[#2f6fbf] opacity-0 transition hover:bg-[#2f6fbf] hover:text-white group-hover:opacity-100"
+                  className="inline-flex w-7 items-center justify-center bg-white text-[#2f6fbf] opacity-0 transition hover:bg-[#e8f0fa] group-hover:opacity-100"
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
                     <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
