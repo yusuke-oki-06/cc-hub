@@ -7,6 +7,8 @@ import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { LangfuseBadge } from '@/components/langfuse-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { MoveToProjectModal } from '@/components/move-to-project-modal';
+import { useToast } from '@/components/toast';
 
 interface Project {
   id: string;
@@ -17,6 +19,7 @@ interface Task {
   id: string;
   prompt: string;
   label: string | null;
+  projectId: string | null;
   status: string;
   createdAt: string;
   profileId: string;
@@ -298,9 +301,11 @@ function SessionRow({
   projects: Project[];
   onChanged: () => void;
 }) {
+  const toast = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(task.label ?? task.prompt);
+  const [moveOpen, setMoveOpen] = useState(false);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -318,29 +323,48 @@ function SessionRow({
       setRenaming(false);
       return;
     }
-    await api(`/api/tasks/${task.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ label: next }),
-    });
+    try {
+      await api(`/api/tasks/${task.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ label: next }),
+      });
+      toast.show('名前を変更しました', 'success');
+    } catch {
+      toast.show('名前の変更に失敗しました', 'error');
+    }
     setRenaming(false);
     onChanged();
   };
 
-  const moveProject = async (projectId: string) => {
-    await api(`/api/tasks/${task.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ projectId }),
-    });
+  const moveProject = async (projectId: string, projectName: string) => {
+    try {
+      await api(`/api/tasks/${task.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ projectId }),
+      });
+      toast.show(`チャットを ${projectName} に移動しました`, 'success');
+    } catch {
+      toast.show('プロジェクトの変更に失敗しました', 'error');
+    }
+    setMoveOpen(false);
     setMenuOpen(false);
     onChanged();
   };
 
   const del = async () => {
     if (!window.confirm('このセッションを削除しますか? (取り消しできません)')) return;
-    await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
+    try {
+      await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
+      toast.show('セッションを削除しました', 'success');
+    } catch {
+      toast.show('削除に失敗しました', 'error');
+    }
     setMenuOpen(false);
     onChanged();
   };
+
+  const currentProjectName =
+    projects.find((p) => p.id === task.projectId)?.name ?? null;
 
   const displayText = task.label ?? task.prompt;
 
@@ -402,21 +426,16 @@ function SessionRow({
           >
             名前を変更
           </button>
-          <div className="border-t border-border-cream">
-            <div className="px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.5px] text-stone">
-              プロジェクトに移動
-            </div>
-            {projects.slice(0, 6).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => moveProject(p.id)}
-                className="block w-full truncate px-3 py-1.5 text-left font-sans text-[12.5px] text-charcoal hover:bg-sand"
-              >
-                {p.name}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setMoveOpen(true);
+              setMenuOpen(false);
+            }}
+            className="block w-full border-t border-border-cream px-3 py-2 text-left font-sans text-[12.5px] text-charcoal hover:bg-sand"
+          >
+            プロジェクトを変更
+          </button>
           <button
             type="button"
             onClick={del}
@@ -425,6 +444,15 @@ function SessionRow({
             削除
           </button>
         </div>
+      )}
+      {moveOpen && (
+        <MoveToProjectModal
+          currentProjectId={task.projectId}
+          currentProjectName={currentProjectName}
+          projects={projects}
+          onMove={moveProject}
+          onClose={() => setMoveOpen(false)}
+        />
       )}
     </li>
   );

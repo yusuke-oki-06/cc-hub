@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Sidebar } from '@/components/sidebar';
+import { ToastProvider } from '@/components/toast';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -19,10 +20,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
       <body>
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 min-w-0">{children}</main>
-        </div>
+        <ToastProvider>
+          <div className="flex min-h-screen">
+            <Sidebar />
+            <main className="flex-1 min-w-0">{children}</main>
+          </div>
+        </ToastProvider>
       </body>
     </html>
   );

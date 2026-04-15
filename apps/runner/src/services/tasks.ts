@@ -6,6 +6,7 @@ export interface TaskRow {
   profileId: string;
   prompt: string;
   label: string | null;
+  projectId: string | null;
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'aborted';
   costUsd: number;
   createdAt: string;
@@ -104,6 +105,7 @@ export async function listTasks(userId: string, limit = 50): Promise<TaskRow[]> 
       profile_id      AS "profileId",
       prompt,
       label,
+      project_id::text AS "projectId",
       status,
       cost_usd::float AS "costUsd",
       created_at::text AS "createdAt",
