@@ -388,7 +388,7 @@ export default function TaskView() {
               onClick={scrollToBottom}
               aria-label="最新へ移動"
               title="最新へ移動"
-              className="absolute left-1/2 top-[42%] z-10 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-border-warm bg-white text-charcoal shadow-[0_6px_16px_rgba(0,0,0,0.12)] transition hover:bg-sand"
+              className="absolute left-1/2 top-10 z-10 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-border-warm bg-white text-charcoal shadow-[0_6px_16px_rgba(0,0,0,0.12)] transition hover:bg-sand"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M8 3v9M4 9l4 4 4-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
