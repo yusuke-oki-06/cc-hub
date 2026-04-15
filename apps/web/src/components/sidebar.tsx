@@ -126,8 +126,22 @@ export function Sidebar() {
         </button>
       </div>
 
+      {/* Top toggle: Chat / Workspace (Claude Desktop-style) */}
+      <div className="mx-3 flex gap-0 border-b border-ring-warm">
+        <TopTab
+          href="/"
+          label="Chat"
+          active={pathname === '/' || pathname?.startsWith('/tasks') || pathname?.startsWith('/wiki') || pathname?.startsWith('/projects') || pathname?.startsWith('/skills')}
+        />
+        <TopTab
+          href="/workspace"
+          label="Workspace"
+          active={pathname?.startsWith('/workspace') ?? false}
+        />
+      </div>
+
       {/* + 新規セッション */}
-      <div className="px-3">
+      <div className="px-3 pt-3">
         <Link
           href="/"
           className={cn(
@@ -274,6 +288,31 @@ function Section({
   );
 }
 
+function TopTab({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        'relative flex-1 py-2 text-center font-sans text-[13px] transition',
+        active ? 'text-near' : 'text-stone hover:text-charcoal',
+      )}
+    >
+      {label}
+      {active && (
+        <span className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-terracotta" />
+      )}
+    </Link>
+  );
+}
+
 function NavItem({
   href,
   label,
@@ -300,15 +339,19 @@ function NavItem({
 }
 
 function StatusDot({ status }: { status: string }) {
-  const color =
-    status === 'succeeded'
-      ? 'bg-[#7a9a3a]'
-      : status === 'running' || status === 'queued'
-        ? 'bg-[#c5902f]'
-        : status === 'failed' || status === 'aborted'
-          ? 'bg-[#b53333]'
-          : 'bg-stone';
-  return <span className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full', color)} />;
+  if (status === 'running' || status === 'queued') {
+    return (
+      <span className="relative mt-1 inline-flex h-1.5 w-1.5 shrink-0">
+        <span className="absolute inset-0 animate-ping rounded-full bg-[#7a9a3a] opacity-70" />
+        <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-[#7a9a3a]" />
+      </span>
+    );
+  }
+  if (status === 'failed' || status === 'aborted') {
+    return <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b53333]" />;
+  }
+  // succeeded / other → subtle grey dot, doesn't grab attention
+  return <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#c7c3b8]" />;
 }
 
 // ----- minimal inline icons (no external dep) -----

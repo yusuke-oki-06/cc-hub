@@ -14,24 +14,24 @@ interface Project {
 
 const SUGGESTIONS = [
   {
-    title: 'パケキャプを解析',
+    title: 'ブレインストーミング',
     prompt:
-      'このパケットキャプチャに含まれる怪しい通信を検出してください。TCP 再送が多い宛先、DNS クエリの異常も含めて。',
+      'これから考えたいテーマを伝えるので、発散 → 観点整理 → 絞り込み の順でブレインストーミングを手伝ってください。まずは題材を聞いてください。',
   },
   {
-    title: 'Excel を要約',
+    title: '文章作成',
     prompt:
-      'このエクセルのシートをすべて読み、各シートの目的・主要な指標・異常値 (外れ値) を日本語で箇条書きにしてください。',
+      '文章を書く手伝いをお願いします。まずは「何を」「誰に」「どんな形式で」書きたいか簡単に聞いてから、下書き → 推敲 を進めてください。',
   },
   {
-    title: 'パワポのレビュー',
+    title: 'Slack',
     prompt:
-      'このパワポの各スライドを日本語で 1 行に要約し、論旨が弱いところ / 補足が必要なところを指摘してください。',
+      'Slack (MCP 連携) を使ってチャンネルを検索したりメッセージを要約したりしたいです。どんな情報が欲しいか聞いてから実行してください。',
   },
   {
-    title: 'PDF 文書から要点抽出',
+    title: 'Jira',
     prompt:
-      'この PDF の要点を 10 項目以内にまとめ、引用したページ番号を併記してください。',
+      'Jira (MCP 連携) で issue を検索・要約したいです。どのプロジェクト / 期間 / キーワードか聞いてから実行してください。',
   },
 ];
 
@@ -171,17 +171,19 @@ export default function Home() {
           }}
         />
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-cream bg-parchment/40 px-4 py-2.5">
-          <div className="flex items-center gap-1">
-            <AttachButton
-              active={mode === 'upload'}
-              onClick={() => setMode(mode === 'upload' ? 'none' : 'upload')}
-              label={files.length > 0 ? `添付 ${files.length} 件` : '添付'}
+          <div className="flex items-center gap-2">
+            <PlusMenu
+              mode={mode}
+              setMode={setMode}
+              files={files}
+              gitUrl={gitUrl}
             />
-            <AttachButton
-              active={mode === 'git'}
-              onClick={() => setMode(mode === 'git' ? 'none' : 'git')}
-              label={gitUrl ? 'Git URL 設定済' : 'Git'}
-            />
+            {files.length > 0 && (
+              <span className="font-sans text-[12px] text-olive">添付 {files.length} 件</span>
+            )}
+            {gitUrl && (
+              <span className="truncate font-sans text-[12px] text-olive">Git 設定済</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -249,47 +251,93 @@ export default function Home() {
         </Card>
       )}
 
-      {/* Suggestion cards */}
-      <section className="mt-10">
-        <h2 className="mb-3 font-sans text-[12px] font-medium uppercase tracking-[0.5px] text-stone">
-          よくある依頼
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s.title}
-              onClick={() => setPrompt(s.prompt)}
-              className="rounded-card border border-border-cream bg-ivory px-4 py-3 text-left transition hover:shadow-ring"
-            >
-              <div className="font-serif text-[15px] text-near">{s.title}</div>
-              <p className="mt-1 line-clamp-2 font-sans text-[12px] text-olive">{s.prompt}</p>
-            </button>
-          ))}
-        </div>
+      {/* Suggestion chips (claude.ai-style) */}
+      <section className="mt-6 flex flex-wrap justify-center gap-2">
+        {SUGGESTIONS.map((s) => (
+          <button
+            key={s.title}
+            onClick={() => setPrompt(s.prompt)}
+            title={s.prompt}
+            className="rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring"
+          >
+            {s.title}
+          </button>
+        ))}
       </section>
     </div>
   );
 }
 
-function AttachButton({
-  active,
-  onClick,
-  label,
+function PlusMenu({
+  mode,
+  setMode,
+  files,
+  gitUrl,
 }: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
+  mode: 'upload' | 'git' | 'none';
+  setMode: (m: 'upload' | 'git' | 'none') => void;
+  files: File[];
+  gitUrl: string;
 }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = () => setOpen(false);
+    // Delay attach so the click that opened the menu doesn't close it.
+    const t = setTimeout(() => document.addEventListener('click', onDocClick), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', onDocClick);
+    };
+  }, [open]);
   return (
-    <button
-      onClick={onClick}
-      className={
-        'rounded-card px-2.5 py-1 font-sans text-[12px] transition ' +
-        (active ? 'bg-sand text-near shadow-ring' : 'text-charcoal hover:bg-sand')
-      }
-    >
-      {label}
-    </button>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border-warm bg-white text-stone hover:text-charcoal"
+        title="添付 / Git"
+        aria-label="添付メニューを開く"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setMode(mode === 'upload' ? 'none' : 'upload');
+              setOpen(false);
+            }}
+            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left font-sans text-[13px] text-charcoal hover:bg-sand"
+          >
+            <span>ファイル添付</span>
+            {files.length > 0 && (
+              <span className="font-mono text-[11px] text-stone">{files.length}</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode(mode === 'git' ? 'none' : 'git');
+              setOpen(false);
+            }}
+            className="flex w-full items-center justify-between gap-2 border-t border-border-cream px-3 py-2 text-left font-sans text-[13px] text-charcoal hover:bg-sand"
+          >
+            <span>Git クローン</span>
+            {gitUrl && <span className="font-mono text-[11px] text-stone">設定済</span>}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

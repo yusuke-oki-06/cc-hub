@@ -8,12 +8,15 @@ test.describe('Quality gates', () => {
     expect(text).not.toMatch(EMOJI_RE);
   });
 
-  test('Suggestion cards render without emoji span', async ({ authedPage: page }) => {
-    const cards = await page.getByRole('button').filter({ hasText: /パケキャプ|Excel|パワポ|PDF/ }).all();
-    expect(cards.length).toBeGreaterThan(0);
-    for (const card of cards) {
-      const txt = await card.innerText();
-      expect(txt, `card text: ${txt}`).not.toMatch(EMOJI_RE);
+  test('Suggestion chips render without emoji span', async ({ authedPage: page }) => {
+    const chips = await page
+      .getByRole('button')
+      .filter({ hasText: /^(ブレインストーミング|文章作成|Slack|Jira)$/ })
+      .all();
+    expect(chips.length).toBeGreaterThan(0);
+    for (const chip of chips) {
+      const txt = await chip.innerText();
+      expect(txt, `chip text: ${txt}`).not.toMatch(EMOJI_RE);
     }
   });
 
@@ -22,9 +25,11 @@ test.describe('Quality gates', () => {
     await expect(badge).toBeVisible({ timeout: 10_000 });
   });
 
-  test('Attach/Git buttons have no emoji', async ({ authedPage: page }) => {
-    const attach = page.getByRole('button', { name: /添付/ });
-    const git = page.getByRole('button', { name: /^Git$/ });
+  test('Plus menu reveals attach/git options without emoji', async ({ authedPage: page }) => {
+    // Composer's + button opens a popover with 「ファイル添付」+「Git クローン」
+    await page.getByRole('button', { name: /添付メニュー/ }).click();
+    const attach = page.getByRole('button', { name: /ファイル添付/ });
+    const git = page.getByRole('button', { name: /Git クローン/ });
     await expect(attach).toBeVisible();
     await expect(git).toBeVisible();
     expect(await attach.innerText()).not.toMatch(EMOJI_RE);

@@ -31,6 +31,7 @@ export default function TaskView() {
   const [connected, setConnected] = useState(false);
   const [profile, setProfile] = useState<ToolProfile | undefined>();
   const [retrying, setRetrying] = useState(false);
+  const [silentTimeout, setSilentTimeout] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const sessionId = task?.sessionId ?? null;
   const timeline = useMemo(() => buildTimeline(events), [events]);
@@ -143,6 +144,18 @@ export default function TaskView() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [timeline.length]);
 
+  // 60-second no-event watchdog: if the session was created but not a
+  // single SSE event has arrived in a minute, surface a "応答がありません"
+  // banner so the user isn't staring at an empty chat forever.
+  useEffect(() => {
+    if (!sessionId || events.length > 0 || !isRunning) {
+      setSilentTimeout(false);
+      return;
+    }
+    const id = setTimeout(() => setSilentTimeout(true), 60_000);
+    return () => clearTimeout(id);
+  }, [sessionId, events.length, isRunning]);
+
   const onAbort = async () => {
     if (!sessionId) return;
     await api(`/api/sessions/${sessionId}/abort`, { method: 'POST' });
@@ -192,6 +205,54 @@ export default function TaskView() {
           )}
         </div>
       </header>
+
+      {silentTimeout && !lastError && (
+        <Card className="border-[#e3d196] bg-[#faf3dd]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <div className="font-sans text-[13px] font-medium text-near">
+                応答がありません
+              </div>
+              <div className="font-sans text-[12px] text-olive">
+                セッションを作ってから 60 秒経っても Claude から何も返ってきません。
+                一度中断して再実行するか、サイドバーから別のセッションを試してください。
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onAbort}
+                disabled={!sessionId}
+              >
+                中断
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={!sessionId || retrying}
+                onClick={async () => {
+                  if (!sessionId) return;
+                  setRetrying(true);
+                  setSilentTimeout(false);
+                  try {
+                    await api(`/api/sessions/${sessionId}/claude/start`, {
+                      method: 'POST',
+                      body: JSON.stringify({}),
+                    });
+                  } catch (e) {
+                    console.error('[task] retry failed', e);
+                  } finally {
+                    setRetrying(false);
+                  }
+                }}
+              >
+                {retrying ? '再実行中…' : '再実行'}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {lastError && (
         <Card className="border-[#e0a9a9] bg-[#fbeaea]">

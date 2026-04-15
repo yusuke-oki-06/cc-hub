@@ -937,6 +937,28 @@ function extractUsage(event: unknown): { input_tokens: number; output_tokens: nu
 }
 
 // ---------- Lifecycle ----------
+// Orphan cleanup: at boot the in-memory session map is empty, so any task
+// left in `running` or `queued` belongs to a previous (dead) runner
+// instance. Move them to `aborted` so the UI doesn't hang on "準備中…"
+// forever.
+async function abortOrphanTasks(): Promise<void> {
+  try {
+    const r = await sql`
+      UPDATE tasks
+         SET status = 'aborted',
+             finished_at = COALESCE(finished_at, now())
+       WHERE status IN ('running', 'queued')
+      RETURNING id
+    `;
+    if (r.length > 0) {
+      console.log(`[runner] aborted ${r.length} orphan task(s) from a previous run`);
+    }
+  } catch (err) {
+    console.error('[runner] orphan cleanup failed', err);
+  }
+}
+void abortOrphanTasks();
+
 const port = config.RUNNER_PORT;
 const server = serve({ fetch: app.fetch, port });
 console.log(`[runner] listening on http://localhost:${port}`);
