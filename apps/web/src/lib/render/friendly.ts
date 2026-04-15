@@ -147,7 +147,8 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
         seq: ev.seq,
         kind: ok ? 'result.success' : 'hidden',
         title: '完了しました',
-        body: typeof text === 'string' ? text : undefined,
+        // body は渡さない — 直前の assistant メッセージで同じテキストが既に
+        // 表示されているため、結果行では "完了しました" のラベルだけで十分。
         meta: time,
       };
     }
@@ -232,7 +233,9 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
         return { seq: ev.seq, kind: 'progress', title: 'セッションを準備中…', meta: time };
       }
       if (ev.type === 'system.init' && payload.langfuseTraceUrl) {
-        return { seq: ev.seq, kind: 'system', title: 'Langfuse トレース記録を開始', meta: time };
+        // Langfuse リンクは右レールで別途表示するので、チャット本文に「記録
+        // を開始」という system 行を流さない。
+        return { seq: ev.seq, kind: 'hidden', title: 'langfuse.init' };
       }
       if (ev.type === 'system.init' && (payload as { model?: string }).model) {
         const model = (payload as { model?: string }).model ?? '';

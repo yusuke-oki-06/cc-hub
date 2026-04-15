@@ -262,10 +262,10 @@ function ModelPicker({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="inline-flex items-center gap-1 rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
+        className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
         title={current.blurb}
       >
-        <span className="font-medium">{current.label}</span>
+        <span className="whitespace-nowrap font-medium">{current.label}</span>
         <span aria-hidden="true" className="text-stone">▾</span>
       </button>
       {open && (
@@ -282,11 +282,11 @@ function ModelPicker({
                 setOpen(false);
               }}
               className={
-                'flex w-full items-start gap-2 px-3 py-2 text-left font-sans text-[12px] hover:bg-sand ' +
+                'flex w-full flex-col gap-0.5 px-3 py-2 text-left font-sans text-[12px] hover:bg-sand ' +
                 (m.id === value ? 'bg-ivory' : '')
               }
             >
-              <span className="mt-0.5 font-medium text-near">{m.label}</span>
+              <span className="whitespace-nowrap font-medium text-near">{m.label}</span>
               <span className="font-sans text-[11px] text-stone">{m.blurb}</span>
             </button>
           ))}

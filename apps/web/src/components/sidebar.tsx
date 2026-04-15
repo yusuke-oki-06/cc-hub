@@ -161,6 +161,25 @@ export function Sidebar() {
 
       {/* Scrollable body */}
       <div className="sidebar-scroll mt-4 flex-1 space-y-4 overflow-y-auto px-3 pb-4">
+        {/* Navigation (上部に配置) */}
+        <Section title="ツール">
+          <nav className="space-y-0.5">
+            <NavItem href="/wiki" label="Wiki" icon={<IconBook />} active={isActive('/wiki')} />
+            <NavItem href="/skills" label="Skills" icon={<IconStar />} active={isActive('/skills')} />
+            <NavItem href="/schedules" label="ルーティン" icon={<IconClock />} active={isActive('/schedules')} />
+          </nav>
+        </Section>
+
+        {/* Admin-only section. Enforcement is best-effort visual labelling
+            in this single-operator PoC; Phase 2 will add middleware RBAC. */}
+        <Section title="管理">
+          <nav className="space-y-0.5">
+            <NavItem href="/profiles" label="プロファイル" icon={<IconSettings />} active={isActive('/profiles')} />
+            <NavItem href="/audit" label="監査ログ" icon={<IconShield />} active={isActive('/audit')} />
+            <NavItem href="/admin/insights" label="利用状況" icon={<IconCrown />} active={isActive('/admin/insights')} />
+          </nav>
+        </Section>
+
         {/* Projects */}
         <Section title="プロジェクト" actionHref="/projects" actionLabel="すべて">
           <ul className="space-y-0.5">
@@ -200,25 +219,6 @@ export function Sidebar() {
               <li className="px-2 py-1.5 font-sans text-[12px] text-stone">まだセッションなし</li>
             )}
           </ul>
-        </Section>
-
-        {/* Navigation */}
-        <Section title="ツール">
-          <nav className="space-y-0.5">
-            <NavItem href="/wiki" label="Wiki" icon={<IconBook />} active={isActive('/wiki')} />
-            <NavItem href="/skills" label="Skills" icon={<IconStar />} active={isActive('/skills')} />
-            <NavItem href="/schedules" label="ルーティン" icon={<IconClock />} active={isActive('/schedules')} />
-          </nav>
-        </Section>
-
-        {/* Admin-only section. Enforcement is best-effort visual labelling
-            in this single-operator PoC; Phase 2 will add middleware RBAC. */}
-        <Section title="管理">
-          <nav className="space-y-0.5">
-            <NavItem href="/profiles" label="プロファイル" icon={<IconSettings />} active={isActive('/profiles')} />
-            <NavItem href="/audit" label="監査ログ" icon={<IconShield />} active={isActive('/audit')} />
-            <NavItem href="/admin/insights" label="利用状況" icon={<IconCrown />} active={isActive('/admin/insights')} />
-          </nav>
         </Section>
       </div>
 

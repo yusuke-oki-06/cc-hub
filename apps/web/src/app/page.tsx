@@ -94,8 +94,7 @@ export default function Home() {
   const [profileId, setProfileId] = useState('default');
   const [prompt, setPrompt] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [gitUrl, setGitUrl] = useState('');
-  const [mode, setMode] = useState<'upload' | 'git' | 'none'>('none');
+  const [mode, setMode] = useState<'upload' | 'none'>('none');
   const [permissionMode, setPermissionMode] = useState<GuiPermissionMode>('default');
   const [model, setModel] = useState<ClaudeModelId>('sonnet');
   const [projectModal, setProjectModal] = useState(false);
@@ -145,12 +144,6 @@ export default function Home() {
           });
           if (!r.ok) throw new Error(`upload failed: ${f.name}`);
         }
-      } else if (mode === 'git' && gitUrl) {
-        setPhase('uploading');
-        await api(`/api/sessions/${created.sessionId}/git-clone`, {
-          method: 'POST',
-          body: JSON.stringify({ url: gitUrl }),
-        });
       }
 
       setPhase('starting');
@@ -254,7 +247,6 @@ export default function Home() {
               mode={mode}
               setMode={setMode}
               files={files}
-              gitUrl={gitUrl}
               onPickSkill={() => setSkillModal(true)}
               onPickProject={() => setProjectModal(true)}
             />
@@ -298,9 +290,6 @@ export default function Home() {
             {files.length > 0 && (
               <span className="font-sans text-[12px] text-olive">添付 {files.length} 件</span>
             )}
-            {gitUrl && (
-              <span className="truncate font-sans text-[12px] text-olive">Git 設定済</span>
-            )}
           </div>
           <div className="flex items-center gap-2">
             <ModeSelector value={permissionMode} onChange={setPermissionMode} />
@@ -328,16 +317,6 @@ export default function Home() {
         {mode === 'upload' && (
           <div className="border-t border-border-cream px-4 py-3">
             <FileDropzone files={files} setFiles={setFiles} />
-          </div>
-        )}
-        {mode === 'git' && (
-          <div className="border-t border-border-cream px-4 py-3">
-            <input
-              className="w-full rounded-card border border-border-warm bg-white px-3 py-2 font-mono text-[13px]"
-              placeholder="https://github.com/org/repo.git"
-              value={gitUrl}
-              onChange={(e) => setGitUrl(e.target.value)}
-            />
           </div>
         )}
       </Card>
@@ -478,14 +457,12 @@ function PlusMenu({
   mode,
   setMode,
   files,
-  gitUrl,
   onPickSkill,
   onPickProject,
 }: {
-  mode: 'upload' | 'git' | 'none';
-  setMode: (m: 'upload' | 'git' | 'none') => void;
+  mode: 'upload' | 'none';
+  setMode: (m: 'upload' | 'none') => void;
   files: File[];
-  gitUrl: string;
   onPickSkill: () => void;
   onPickProject: () => void;
 }) {
@@ -509,7 +486,7 @@ function PlusMenu({
           setOpen((v) => !v);
         }}
         className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border-warm bg-white text-stone hover:text-charcoal"
-        title="添付 / Git"
+        title="添付 / スキル / プロジェクト"
         aria-label="添付メニューを開く"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
@@ -533,17 +510,6 @@ function PlusMenu({
             {files.length > 0 && (
               <span className="font-mono text-[11px] text-stone">{files.length}</span>
             )}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode(mode === 'git' ? 'none' : 'git');
-              setOpen(false);
-            }}
-            className="flex w-full items-center justify-between gap-2 border-t border-border-cream px-3 py-2 text-left font-sans text-[13px] text-charcoal hover:bg-sand"
-          >
-            <span>Git クローン</span>
-            {gitUrl && <span className="font-mono text-[11px] text-stone">設定済</span>}
           </button>
           <button
             type="button"
@@ -598,10 +564,10 @@ function ModelPicker({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="inline-flex items-center gap-1 rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
+        className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
         title={current.blurb}
       >
-        <span className="font-medium">{current.label}</span>
+        <span className="whitespace-nowrap font-medium">{current.label}</span>
         <span aria-hidden="true" className="text-stone">▾</span>
       </button>
       {open && (
@@ -618,11 +584,11 @@ function ModelPicker({
                 setOpen(false);
               }}
               className={
-                'flex w-full items-start gap-2 px-3 py-2 text-left font-sans text-[12px] hover:bg-sand ' +
+                'flex w-full flex-col gap-0.5 px-3 py-2 text-left font-sans text-[12px] hover:bg-sand ' +
                 (m.id === value ? 'bg-ivory' : '')
               }
             >
-              <span className="mt-0.5 font-medium text-near">{m.label}</span>
+              <span className="whitespace-nowrap font-medium text-near">{m.label}</span>
               <span className="font-sans text-[11px] text-stone">{m.blurb}</span>
             </button>
           ))}
