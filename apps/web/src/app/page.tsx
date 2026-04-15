@@ -1,11 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { api, runnerBase, getAuthHeader, withTimeout } from '@/lib/api';
 import { SiSlack, SiJira } from 'react-icons/si';
 import { TokenSetup } from '@/components/token-setup';
+import { SkillPicker, type SkillItem } from '@/components/skill-picker';
 import {
   GUI_PERMISSION_MODES,
   type GuiPermissionMode,
@@ -92,6 +93,9 @@ export default function Home() {
   const [gitUrl, setGitUrl] = useState('');
   const [mode, setMode] = useState<'upload' | 'git' | 'none'>('none');
   const [permissionMode, setPermissionMode] = useState<GuiPermissionMode>('default');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [skillModal, setSkillModal] = useState(false);
+  const [slash, setSlash] = useState<{ start: number; query: string; top: number; left: number } | null>(null);
   const [phase, setPhase] = useState<SubmitPhase>('idle');
   const [uploadProgress, setUploadProgress] = useState<{ index: number; total: number }>({ index: 0, total: 0 });
   const [error, setError] = useState<string>();
@@ -164,6 +168,37 @@ export default function Home() {
     }
   };
 
+  // Replace the slash token (e.g. "/pdf") with "/slug " in place and move
+  // the caret to just after the inserted slug.
+  const insertSkillSlug = (slug: string, tokenStart: number, tokenLen: number) => {
+    const before = prompt.slice(0, tokenStart);
+    const after = prompt.slice(tokenStart + tokenLen);
+    const inserted = `/${slug} `;
+    const next = `${before}${inserted}${after}`;
+    setPrompt(next);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      const caret = before.length + inserted.length;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  };
+
+  // From the modal: prepend "/slug " if not already present.
+  const prependSkillSlug = (slug: string) => {
+    const token = `/${slug} `;
+    if (prompt.startsWith(token)) return;
+    const next = `${token}${prompt}`;
+    setPrompt(next);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(token.length, token.length);
+    });
+  };
+
   return (
     <div className="mx-auto flex min-h-screen max-w-[720px] flex-col justify-center px-6 pt-16 pb-12">
       <TokenSetup />
@@ -181,16 +216,31 @@ export default function Home() {
           the PlusMenu popover can extend below the toolbar. */}
       <Card className="overflow-visible p-0 shadow-whisper theme-airbnb-composer">
         <textarea
+          ref={textareaRef}
           rows={2}
           className="block w-full resize-none border-0 bg-transparent px-5 pt-5 pb-2 font-sans text-[16px] leading-[1.6] text-near placeholder:text-stone focus:outline-none"
-          placeholder="例: この pcap の DNS クエリを要約して、怪しい宛先があれば列挙して"
+          placeholder="例: この pcap の DNS クエリを要約して、怪しい宛先があれば列挙して ( / でスキルを選択 )"
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setPrompt(v);
+            const caret = e.target.selectionStart ?? v.length;
+            setSlash(detectSlashTrigger(v, caret, e.target));
+          }}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
               e.preventDefault();
               if (prompt.trim()) void submit();
+              return;
             }
+            if (slash && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
+              // SkillPicker listens to document keydown; prevent newline on Enter.
+              if (e.key === 'Enter') e.preventDefault();
+            }
+          }}
+          onBlur={() => {
+            // Delay close so clicks on the popover register first.
+            window.setTimeout(() => setSlash(null), 120);
           }}
         />
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-cream bg-parchment/40 px-4 py-2.5">
@@ -200,6 +250,7 @@ export default function Home() {
               setMode={setMode}
               files={files}
               gitUrl={gitUrl}
+              onPickSkill={() => setSkillModal(true)}
             />
             {files.length > 0 && (
               <span className="font-sans text-[12px] text-olive">添付 {files.length} 件</span>
@@ -286,6 +337,30 @@ export default function Home() {
         </Card>
       )}
 
+      {slash && (
+        <SkillPicker
+          variant="inline"
+          query={slash.query}
+          anchor={{ top: slash.top, left: slash.left }}
+          onPick={(s) => {
+            insertSkillSlug(s.slug, slash.start, slash.query.length + 1);
+            setSlash(null);
+          }}
+          onClose={() => setSlash(null)}
+        />
+      )}
+
+      {skillModal && (
+        <SkillPicker
+          variant="modal"
+          onPick={(s) => {
+            prependSkillSlug(s.slug);
+            setSkillModal(false);
+          }}
+          onClose={() => setSkillModal(false)}
+        />
+      )}
+
       {/* Suggestion chips (claude.ai-style, with icons) */}
       <section className="mt-4 flex flex-wrap justify-center gap-2">
         {SUGGESTIONS.map((s) =>
@@ -363,11 +438,13 @@ function PlusMenu({
   setMode,
   files,
   gitUrl,
+  onPickSkill,
 }: {
   mode: 'upload' | 'git' | 'none';
   setMode: (m: 'upload' | 'git' | 'none') => void;
   files: File[];
   gitUrl: string;
+  onPickSkill: () => void;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -425,10 +502,51 @@ function PlusMenu({
             <span>Git クローン</span>
             {gitUrl && <span className="font-mono text-[11px] text-stone">設定済</span>}
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              onPickSkill();
+              setOpen(false);
+            }}
+            className="flex w-full items-center justify-between gap-2 border-t border-border-cream px-3 py-2 text-left font-sans text-[13px] text-charcoal hover:bg-sand"
+          >
+            <span>スキルを選ぶ</span>
+            <span className="font-mono text-[11px] text-stone">/</span>
+          </button>
         </div>
       )}
     </div>
   );
+}
+
+/** Returns slash-trigger state if the caret follows a `/` that starts at the
+ *  beginning of input or after whitespace. Returns null otherwise. */
+function detectSlashTrigger(
+  text: string,
+  caret: number,
+  el: HTMLTextAreaElement,
+): { start: number; query: string; top: number; left: number } | null {
+  // Walk backwards from the caret until we hit a `/` with a valid boundary
+  // char in front, or fail (hit whitespace/start before any `/`).
+  let i = caret - 1;
+  while (i >= 0) {
+    const ch = text[i];
+    if (ch === '/') {
+      const before = i === 0 ? '\n' : text[i - 1];
+      if (!before || /\s/.test(before)) {
+        const query = text.slice(i + 1, caret);
+        // Abort if the query already contains whitespace — user moved past the token.
+        if (/\s/.test(query)) return null;
+        // Position the popover near the textarea (top-left of element, offset down).
+        const rect = el.getBoundingClientRect();
+        return { start: i, query, top: rect.bottom + 4, left: rect.left };
+      }
+      return null;
+    }
+    if (/\s/.test(ch ?? '')) return null;
+    i -= 1;
+  }
+  return null;
 }
 
 function FileDropzone({ files, setFiles }: { files: File[]; setFiles: (f: File[]) => void }) {

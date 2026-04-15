@@ -65,7 +65,7 @@ export default function SkillsPage() {
         ← ダッシュボード
       </Link>
       <div className="flex items-center justify-between border-b border-border-warm pb-4">
-        <h1 className="font-serif text-[36px] leading-[1.1] text-near">Skills マーケット</h1>
+        <h1 className="font-serif text-[36px] leading-[1.1] text-near">Skills マーケットプレイス</h1>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1 font-sans text-[12px] text-olive">
             <input

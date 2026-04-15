@@ -205,7 +205,6 @@ export function Sidebar() {
         {/* Navigation */}
         <Section title="ツール">
           <nav className="space-y-0.5">
-            <NavItem href="/workspace" label="ワークスペース" icon={<IconGrid />} active={isActive('/workspace')} />
             <NavItem href="/wiki" label="Wiki" icon={<IconBook />} active={isActive('/wiki')} />
             <NavItem href="/skills" label="Skills" icon={<IconStar />} active={isActive('/skills')} />
             <NavItem href="/schedules" label="ルーティン" icon={<IconClock />} active={isActive('/schedules')} />
