@@ -20,18 +20,10 @@ export function TokenSetup() {
 
   if (open === null) return null;
 
-  if (!open && saved) {
-    return (
-      <div className="flex justify-end">
-        <button
-          className="font-sans text-[12px] text-stone underline decoration-dotted hover:text-olive"
-          onClick={() => setOpen(true)}
-        >
-          API token を変更
-        </button>
-      </div>
-    );
-  }
+  // Token already saved — render nothing. The initial setup card still shows
+  // on first visit so users can bootstrap auth, but we don't surface the
+  // "change" affordance in normal usage.
+  if (!open && saved) return null;
 
   return (
     <Card className="border-[#e3d196] bg-[#faf3dd]">
