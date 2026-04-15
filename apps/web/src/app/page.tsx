@@ -219,7 +219,7 @@ export default function Home() {
           ref={textareaRef}
           rows={2}
           className="block w-full resize-none border-0 bg-transparent px-5 pt-5 pb-2 font-sans text-[16px] leading-[1.6] text-near placeholder:text-stone focus:outline-none"
-          placeholder="例: この pcap の DNS クエリを要約して、怪しい宛先があれば列挙して ( / でスキルを選択 )"
+          placeholder="今日はどんなお題から始めましょうか?"
           value={prompt}
           onChange={(e) => {
             const v = e.target.value;
