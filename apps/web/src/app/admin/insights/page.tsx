@@ -135,7 +135,7 @@ export default function AdminInsights() {
       </Link>
       <header className="flex items-start justify-between gap-4 border-b border-border-warm pb-4">
         <div>
-          <h1 className="font-serif text-[36px] leading-[1.1] text-near">利用状況 (経営サマリー)</h1>
+          <h1 className="font-serif text-[36px] leading-[1.1] text-near">利用状況</h1>
           <p className="mt-1 font-sans text-[12px] text-stone">
             投資対効果を経営層に示すための集計。時給単価は組織・案件で異なるため、ここでは時間と投資額をそのまま提示します。詳細な trace は{' '}
             <a
@@ -333,9 +333,9 @@ export default function AdminInsights() {
                   {new Date(t.createdAt).toLocaleString('ja-JP')}
                 </div>
               </div>
-              <div className="ml-3 shrink-0 font-serif text-[14px] text-near">
+              <div className="ml-3 shrink-0 font-serif text-[14px] text-near tabular-nums">
                 ${t.costUsd.toFixed(3)}
-                <span className="ml-2 font-sans text-[11px] text-stone">
+                <span className="ml-2 font-sans text-[11px] text-stone tabular-nums">
                   ≒ {yen(t.costUsd * settings.fxJpyPerUsd)}
                 </span>
               </div>
@@ -349,10 +349,10 @@ export default function AdminInsights() {
 
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <Card>
-      <div className="font-sans text-[12px] text-stone">{label}</div>
-      <div className="mt-1 font-serif text-[28px] leading-[1] text-near">{value}</div>
-      {hint && <div className="mt-1 font-sans text-[11px] text-stone">{hint}</div>}
+    <Card className="flex h-full flex-col">
+      <div className="min-h-[2.25em] font-sans text-[12px] leading-[1.3] text-stone">{label}</div>
+      <div className="mt-1 font-serif text-[28px] leading-[1] text-near tabular-nums">{value}</div>
+      {hint && <div className="mt-auto pt-2 font-sans text-[11px] text-stone">{hint}</div>}
     </Card>
   );
 }
@@ -381,17 +381,17 @@ function HeroCard({
         ? 'border-[#e0a9a9] bg-[#fbeaea] text-error-crimson'
         : 'border-border-cream bg-ivory text-stone';
   return (
-    <Card className={`border ${accentClass}`}>
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="font-sans text-[12px] text-stone">{label}</div>
+    <Card className={`flex h-full flex-col border ${accentClass}`}>
+      <div className="flex min-h-[2.25em] items-baseline justify-between gap-3">
+        <div className="font-sans text-[12px] leading-[1.3] text-stone">{label}</div>
         {delta && (
-          <span className={`rounded-full border px-2 py-[1px] font-sans text-[11px] ${deltaClass}`}>
+          <span className={`shrink-0 rounded-full border px-2 py-[1px] font-sans text-[11px] ${deltaClass}`}>
             {delta.label}
           </span>
         )}
       </div>
-      <div className="mt-2 font-serif text-[44px] leading-[1] text-near">{value}</div>
-      {subline && <div className="mt-2 font-sans text-[12px] text-olive">{subline}</div>}
+      <div className="mt-2 font-serif text-[44px] leading-[1] text-near tabular-nums">{value}</div>
+      {subline && <div className="mt-auto pt-2 font-sans text-[12px] text-olive">{subline}</div>}
     </Card>
   );
 }
