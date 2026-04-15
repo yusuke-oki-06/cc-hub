@@ -5,7 +5,6 @@ import {
   GUI_PERMISSION_MODES,
   type ClaudeModelId,
   type GuiPermissionMode,
-  type ToolProfile,
 } from '@cc-hub/shared';
 import { SkillPicker } from '@/components/skill-picker';
 
@@ -21,8 +20,6 @@ export interface PromptComposerProps {
   variant?: 'new' | 'followup';
   placeholder?: string;
   disabled?: boolean;
-  /** Kept for API compat; per-turn tool override UI は廃止した。 */
-  profile?: ToolProfile;
   onSubmit: (payload: ComposerSubmit) => void | Promise<void>;
   /** フォローアップで表示したいショートカット (履歴整理・CLAUDE.md 生成 等)。
    *  composer の上に行として並ぶ。 */
@@ -30,6 +27,9 @@ export interface PromptComposerProps {
   /** 値をリセットしたい時 (送信完了時など) に親側が数値を bump する。 */
   resetKey?: number;
 }
+
+// 注: per-turn tool allowlist override (以前 profile prop 経由) は撤廃した。
+// ツール / MCP の制御は backend 側プロファイル + hooks で行う設計に統一。
 
 export function PromptComposer({
   variant = 'followup',

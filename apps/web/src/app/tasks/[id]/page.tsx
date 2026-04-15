@@ -10,7 +10,7 @@ import { subscribeSession } from '@/lib/sse';
 import { buildTimeline, type FriendlyItem } from '@/lib/render/friendly';
 import { PromptComposer, type ComposerSubmit } from '@/components/prompt-composer';
 import { ChatMessage, ChatThinking } from '@/components/chat-message';
-import type { SseEvent, ToolProfile } from '@cc-hub/shared';
+import type { SseEvent } from '@cc-hub/shared';
 
 interface Task {
   id: string;
@@ -29,7 +29,6 @@ export default function TaskView() {
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<SseEvent[]>([]);
   const [connected, setConnected] = useState(false);
-  const [profile, setProfile] = useState<ToolProfile | undefined>();
   const [retrying, setRetrying] = useState(false);
   const [silentTimeout, setSilentTimeout] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -114,14 +113,6 @@ export default function TaskView() {
     }, 3000);
     return () => clearInterval(id);
   }, [taskId]);
-
-  // Load profile for composer allowlist context
-  useEffect(() => {
-    if (!task?.profileId) return;
-    api<{ profiles: ToolProfile[] }>('/api/profiles')
-      .then((r) => setProfile(r.profiles.find((p) => p.id === task.profileId)))
-      .catch(() => undefined);
-  }, [task?.profileId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -403,7 +394,6 @@ export default function TaskView() {
           {/* Composer (bottom-fixed within section via grid-rows auto) */}
           <PromptComposer
             variant="followup"
-            profile={profile}
             disabled={!sessionId || isRunning}
             onSubmit={sendPrompt}
             extraActions={

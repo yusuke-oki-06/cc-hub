@@ -227,8 +227,11 @@ export default function Home() {
           }
         }}
         onDragLeave={(e) => {
-          // Only clear when leaving the card itself (not inner children)
-          if (e.currentTarget === e.target) setDragOver(false);
+          // Clear only when the pointer leaves the Card entirely, not when it
+          // merely moves into a descendant. `relatedTarget` is the element we're
+          // entering; if it's inside the Card we're still "over" it.
+          const to = e.relatedTarget as Node | null;
+          if (!to || !e.currentTarget.contains(to)) setDragOver(false);
         }}
         onDrop={(e) => {
           e.preventDefault();
