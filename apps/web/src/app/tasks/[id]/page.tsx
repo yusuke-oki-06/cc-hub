@@ -33,6 +33,10 @@ export default function TaskView() {
   const [retrying, setRetrying] = useState(false);
   const [silentTimeout, setSilentTimeout] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  // Tracks whether the chat log is scrolled to (near) the bottom. Used to
+  // decide whether new events should auto-scroll and whether to show the
+  // floating "jump to bottom" button.
+  const [atBottom, setAtBottom] = useState(true);
   const sessionId = task?.sessionId ?? null;
   const timeline = useMemo(() => buildTimeline(events), [events]);
   const traceUrl = useMemo(() => {
@@ -140,9 +144,26 @@ export default function TaskView() {
     return () => handle.close();
   }, [sessionId]);
 
+  // Only auto-scroll when the user was already at the bottom; otherwise
+  // respect their current scroll position so they can read history while
+  // new events pour in.
   useEffect(() => {
+    if (!atBottom) return;
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [timeline.length]);
+  }, [timeline.length, atBottom]);
+
+  const onTimelineScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
+    setAtBottom(gap < 40);
+  };
+
+  const scrollToBottom = () => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  };
 
   // 60-second no-event watchdog: if the session was created but not a
   // single SSE event has arrived in a minute, surface a "応答がありません"
@@ -328,9 +349,19 @@ export default function TaskView() {
       )}
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_300px]">
-        {/* Main column: timeline + composer (Claude.ai-style, narrow reading width) */}
-        <section className="mx-auto w-full max-w-[760px] space-y-4">
-          <div ref={listRef} className="max-h-[68vh] overflow-y-auto pr-2">
+        {/* Main column — claude.ai 風の縦方向レイアウト:
+              - 行 1: タイムラインが残りの高さを占有 + 独立スクロール
+              - 行 2: composer は下部固定
+              - 途中までスクロールしたら「一番下へ」ボタンが中央より少し上に出る */}
+        <section
+          className="relative mx-auto grid w-full max-w-[760px] grid-rows-[1fr_auto] gap-4"
+          style={{ height: 'calc(100svh - 240px)', minHeight: 420 }}
+        >
+          <div
+            ref={listRef}
+            onScroll={onTimelineScroll}
+            className="relative min-h-0 overflow-y-auto pr-2"
+          >
             <div className="space-y-4 py-2">
               {timeline.map((it) => (
                 <ChatMessage
@@ -350,7 +381,22 @@ export default function TaskView() {
             </div>
           </div>
 
-          {/* Composer */}
+          {/* Jump-to-bottom 丸ボタン — 未読があるときチャット中央少し上に浮かぶ */}
+          {!atBottom && timeline.length > 0 && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              aria-label="最新へ移動"
+              title="最新へ移動"
+              className="absolute left-1/2 top-[42%] z-10 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-border-warm bg-white text-charcoal shadow-[0_6px_16px_rgba(0,0,0,0.12)] transition hover:bg-sand"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 3v9M4 9l4 4 4-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+
+          {/* Composer (bottom-fixed within section via grid-rows auto) */}
           <PromptComposer
             variant="followup"
             profile={profile}
@@ -377,11 +423,6 @@ export default function TaskView() {
                     )
                   }
                   disabled={!sessionId || isRunning}
-                />
-                <ShortcutButton
-                  label="新しいセッション"
-                  title="現状を保存せず新しい会話を開始"
-                  onClick={() => router.push('/')}
                 />
               </>
             }
