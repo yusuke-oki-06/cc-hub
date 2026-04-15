@@ -61,7 +61,6 @@ const HEADLINES: string[] = [
   '今日は何をしましょう?',
   '何から始めましょうか?',
   'どんなタスクですか?',
-  'どんな資料を見てもらいましょう?',
   '気になっていることを教えてください',
   '手伝えることはありますか?',
   '次の一歩、お手伝いします',
@@ -183,7 +182,7 @@ export default function Home() {
           </div>
         )}
         <h1
-          className="font-serif text-[56px] leading-[1.05] text-near theme-airbnb-hero"
+          className="font-serif text-[56px] leading-[1.05] text-near theme-airbnb-hero whitespace-nowrap"
           suppressHydrationWarning
         >
           {greeting.headline}
