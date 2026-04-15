@@ -12,24 +12,30 @@ interface Project {
   name: string;
 }
 
-const SUGGESTIONS = [
+type ChipIcon = 'bulb' | 'pencil' | 'slack' | 'jira';
+
+const SUGGESTIONS: Array<{ title: string; prompt: string; icon: ChipIcon }> = [
   {
     title: 'ブレインストーミング',
+    icon: 'bulb',
     prompt:
       'これから考えたいテーマを伝えるので、発散 → 観点整理 → 絞り込み の順でブレインストーミングを手伝ってください。まずは題材を聞いてください。',
   },
   {
     title: '文章作成',
+    icon: 'pencil',
     prompt:
       '文章を書く手伝いをお願いします。まずは「何を」「誰に」「どんな形式で」書きたいか簡単に聞いてから、下書き → 推敲 を進めてください。',
   },
   {
     title: 'Slack',
+    icon: 'slack',
     prompt:
       'Slack (MCP 連携) を使ってチャンネルを検索したりメッセージを要約したりしたいです。どんな情報が欲しいか聞いてから実行してください。',
   },
   {
     title: 'Jira',
+    icon: 'jira',
     prompt:
       'Jira (MCP 連携) で issue を検索・要約したいです。どのプロジェクト / 期間 / キーワードか聞いてから実行してください。',
   },
@@ -143,22 +149,22 @@ export default function Home() {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[860px] flex-col justify-center px-8 pt-16 pb-12">
+    <div className="mx-auto flex min-h-screen max-w-[720px] flex-col justify-center px-6 pt-16 pb-12">
       <TokenSetup />
 
-      <header className="mb-10 mt-2 text-center">
+      <header className="mb-8 mt-2 text-center">
         <h1
-          className="font-serif text-[56px] leading-[1.05] text-near theme-airbnb-hero whitespace-nowrap"
+          className="font-serif text-[40px] leading-[1.1] text-near theme-airbnb-hero whitespace-nowrap"
           suppressHydrationWarning
         >
           {greeting.headline}
         </h1>
       </header>
 
-      {/* Big prompt composer */}
+      {/* Compact prompt composer (claude.ai-style) */}
       <Card className="overflow-hidden p-0 shadow-whisper theme-airbnb-composer">
         <textarea
-          rows={5}
+          rows={2}
           className="block w-full resize-none border-0 bg-transparent px-5 pt-5 pb-2 font-sans text-[16px] leading-[1.6] text-near placeholder:text-stone focus:outline-none"
           placeholder="例: この pcap の DNS クエリを要約して、怪しい宛先があれば列挙して"
           value={prompt}
@@ -251,20 +257,72 @@ export default function Home() {
         </Card>
       )}
 
-      {/* Suggestion chips (claude.ai-style) */}
-      <section className="mt-6 flex flex-wrap justify-center gap-2">
+      {/* Suggestion chips (claude.ai-style, with icons) */}
+      <section className="mt-4 flex flex-wrap justify-center gap-2">
         {SUGGESTIONS.map((s) => (
           <button
             key={s.title}
             onClick={() => setPrompt(s.prompt)}
             title={s.prompt}
-            className="rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[13px] text-charcoal transition hover:shadow-ring"
           >
+            <ChipIconSvg name={s.icon} />
             {s.title}
           </button>
         ))}
       </section>
     </div>
+  );
+}
+
+function ChipIconSvg({ name }: { name: ChipIcon }) {
+  const common = { width: 13, height: 13, viewBox: '0 0 16 16', fill: 'none' as const, 'aria-hidden': true };
+  if (name === 'bulb') {
+    return (
+      <svg {...common}>
+        <path
+          d="M8 2.5a4 4 0 0 0-2.5 7.1V11h5V9.6A4 4 0 0 0 8 2.5zM6 13h4M7 14.5h2"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (name === 'pencil') {
+    return (
+      <svg {...common}>
+        <path
+          d="M11.5 2.5 13.5 4.5 5 13H3v-2l8.5-8.5z"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (name === 'slack') {
+    return (
+      <svg {...common}>
+        <path
+          d="M4 10a1.5 1.5 0 1 0 0 3h1.5v-1.5H4zm3 0v3a1.5 1.5 0 0 0 3 0V10zm-3-3a1.5 1.5 0 1 1 0-3h1.5v1.5H4zm3 0V4a1.5 1.5 0 0 1 3 0v3zm5 3a1.5 1.5 0 1 1 0-3h-1.5v1.5H12zm-3 0V7a1.5 1.5 0 1 1 3 0v3zm3 3a1.5 1.5 0 1 0 0-3h-1.5v1.5H12z"
+          fill="currentColor"
+        />
+      </svg>
+    );
+  }
+  // jira — abstract triangle stack
+  return (
+    <svg {...common}>
+      <path
+        d="M8 2.5 13 8H9v1.5l-3 2.5V9H3L8 2.5z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
   );
 }
 
