@@ -205,6 +205,7 @@ export function Sidebar() {
             <NavItem href="/workspace" label="ワークスペース" icon={<IconGrid />} active={isActive('/workspace')} />
             <NavItem href="/wiki" label="Wiki" icon={<IconBook />} active={isActive('/wiki')} />
             <NavItem href="/skills" label="Skills" icon={<IconStar />} active={isActive('/skills')} />
+            <NavItem href="/schedules" label="ルーティン" icon={<IconClock />} active={isActive('/schedules')} />
           </nav>
         </Section>
 
@@ -347,7 +348,7 @@ function SessionRow({
     <li className="group relative">
       <div
         className={cn(
-          'flex min-w-0 items-start gap-2 rounded-card px-2 py-1.5 font-sans text-[12.5px] leading-[1.35] text-charcoal hover:bg-ivory',
+          'flex min-w-0 items-start gap-1.5 rounded-card py-1.5 pl-2 pr-1 font-sans text-[12.5px] leading-[1.35] text-charcoal hover:bg-ivory',
           active ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : '',
         )}
       >
@@ -376,7 +377,7 @@ function SessionRow({
             e.stopPropagation();
             setMenuOpen((v) => !v);
           }}
-          className="shrink-0 rounded p-0.5 text-stone opacity-0 transition hover:bg-sand hover:text-charcoal group-hover:opacity-100"
+          className="ml-auto -mr-0.5 shrink-0 rounded p-1 text-stone opacity-0 transition hover:bg-sand hover:text-charcoal group-hover:opacity-100"
           aria-label="セッションメニュー"
         >
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
@@ -589,6 +590,15 @@ function IconCrown({ className = '' }: { className?: string }) {
         strokeWidth="1.2"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function IconClock({ className = '' }: { className?: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={className}>
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8 4.5V8l2.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   );
 }
