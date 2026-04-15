@@ -1,14 +1,16 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { api, runnerBase, getAuthHeader, withTimeout } from '@/lib/api';
 import { SiSlack, SiJira } from 'react-icons/si';
 import { TokenSetup } from '@/components/token-setup';
 import { SkillPicker, type SkillItem } from '@/components/skill-picker';
+import { MoveToProjectModal } from '@/components/move-to-project-modal';
 import {
+  CLAUDE_MODELS,
   GUI_PERMISSION_MODES,
+  type ClaudeModelId,
   type GuiPermissionMode,
   type ToolProfile,
 } from '@cc-hub/shared';
@@ -93,6 +95,8 @@ export default function Home() {
   const [gitUrl, setGitUrl] = useState('');
   const [mode, setMode] = useState<'upload' | 'git' | 'none'>('none');
   const [permissionMode, setPermissionMode] = useState<GuiPermissionMode>('default');
+  const [model, setModel] = useState<ClaudeModelId>('sonnet');
+  const [projectModal, setProjectModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [skillModal, setSkillModal] = useState(false);
   const [slash, setSlash] = useState<{ start: number; query: string; top: number; left: number } | null>(null);
@@ -154,7 +158,7 @@ export default function Home() {
       await withTimeout(
         api(`/api/sessions/${created.sessionId}/claude/start`, {
           method: 'POST',
-          body: JSON.stringify({ permissionMode }),
+          body: JSON.stringify({ permissionMode, model }),
         }),
         120_000,
         'Claude 起動',
@@ -251,6 +255,7 @@ export default function Home() {
               files={files}
               gitUrl={gitUrl}
               onPickSkill={() => setSkillModal(true)}
+              onPickProject={() => setProjectModal(true)}
             />
             {files.length > 0 && (
               <span className="font-sans text-[12px] text-olive">添付 {files.length} 件</span>
@@ -258,35 +263,13 @@ export default function Home() {
             {gitUrl && (
               <span className="truncate font-sans text-[12px] text-olive">Git 設定済</span>
             )}
-          </div>
-          <div className="flex items-center gap-2">
+            <ModelPicker value={model} onChange={setModel} />
+            <ModeSelector value={permissionMode} onChange={setPermissionMode} />
             <select
-              className="rounded-card border border-border-warm bg-white px-2 py-1 font-sans text-[12px] text-near"
-              value={permissionMode}
-              onChange={(e) => setPermissionMode(e.target.value as GuiPermissionMode)}
-              title="実行モード"
-            >
-              {GUI_PERMISSION_MODES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rounded-card border border-border-warm bg-white px-2 py-1 font-sans text-[12px] text-near"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rounded-card border border-border-warm bg-white px-2 py-1 font-sans text-[12px] text-near"
+              className="rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
               value={profileId}
               onChange={(e) => setProfileId(e.target.value)}
+              title="Profile"
             >
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -294,10 +277,25 @@ export default function Home() {
                 </option>
               ))}
             </select>
-            <Button size="sm" onClick={submit} disabled={!prompt.trim() || loading}>
-              {phaseLabel(phase, uploadProgress.index, uploadProgress.total)}
-            </Button>
           </div>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!prompt.trim() || loading}
+            title={`実行 (⌘Enter) — ${phaseLabel(phase, uploadProgress.index, uploadProgress.total)}`}
+            aria-label="送信"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-terracotta text-ivory transition hover:bg-[#b5573a] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <svg width="14" height="14" viewBox="0 0 16 16" className="animate-spin" aria-hidden="true">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="none" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
         </div>
         {mode === 'upload' && (
           <div className="border-t border-border-cream px-4 py-3">
@@ -315,6 +313,27 @@ export default function Home() {
           </div>
         )}
       </Card>
+
+      {/* Subtle project badge directly under the composer. Clicking opens the
+          move-to-project modal so the user can change context without leaving
+          the landing page. */}
+      <div className="mt-2 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setProjectModal(true)}
+          className="inline-flex items-center gap-2 rounded-full px-2 py-0.5 font-sans text-[12px] text-stone transition hover:text-olive"
+          title="プロジェクトを変更"
+        >
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: projectColor(projectId) }}
+          />
+          <span>
+            {projects.find((p) => p.id === projectId)?.name ?? '未分類'}
+          </span>
+        </button>
+      </div>
 
       {loading && (
         <Card className="mt-4 border-border-warm bg-parchment/60">
@@ -358,6 +377,19 @@ export default function Home() {
             setSkillModal(false);
           }}
           onClose={() => setSkillModal(false)}
+        />
+      )}
+
+      {projectModal && (
+        <MoveToProjectModal
+          currentProjectId={projectId}
+          currentProjectName={projects.find((p) => p.id === projectId)?.name ?? null}
+          projects={projects}
+          onMove={(id) => {
+            setProjectId(id);
+            setProjectModal(false);
+          }}
+          onClose={() => setProjectModal(false)}
         />
       )}
 
@@ -441,12 +473,14 @@ function PlusMenu({
   files,
   gitUrl,
   onPickSkill,
+  onPickProject,
 }: {
   mode: 'upload' | 'git' | 'none';
   setMode: (m: 'upload' | 'git' | 'none') => void;
   files: File[];
   gitUrl: string;
   onPickSkill: () => void;
+  onPickProject: () => void;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -515,10 +549,171 @@ function PlusMenu({
             <span>スキルを選ぶ</span>
             <span className="font-mono text-[11px] text-stone">/</span>
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              onPickProject();
+              setOpen(false);
+            }}
+            className="flex w-full items-center justify-between gap-2 border-t border-border-cream px-3 py-2 text-left font-sans text-[13px] text-charcoal hover:bg-sand"
+          >
+            <span>プロジェクトを選ぶ</span>
+          </button>
         </div>
       )}
     </div>
   );
+}
+
+function ModelPicker({
+  value,
+  onChange,
+}: {
+  value: ClaudeModelId;
+  onChange: (v: ClaudeModelId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = () => setOpen(false);
+    const t = setTimeout(() => document.addEventListener('click', onDoc), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', onDoc);
+    };
+  }, [open]);
+  const current = CLAUDE_MODELS.find((m) => m.id === value) ?? CLAUDE_MODELS[1];
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="inline-flex items-center gap-1 rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
+        title={current.blurb}
+      >
+        <span className="font-medium">{current.label}</span>
+        <span aria-hidden="true" className="text-stone">▾</span>
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute left-0 top-full z-30 mt-1 w-60 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
+        >
+          {CLAUDE_MODELS.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => {
+                onChange(m.id);
+                setOpen(false);
+              }}
+              className={
+                'flex w-full items-start gap-2 px-3 py-2 text-left font-sans text-[12px] hover:bg-sand ' +
+                (m.id === value ? 'bg-ivory' : '')
+              }
+            >
+              <span className="mt-0.5 font-medium text-near">{m.label}</span>
+              <span className="font-sans text-[11px] text-stone">{m.blurb}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MODE_ICONS: Record<GuiPermissionMode, JSX.Element> = {
+  default: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M3 4h10a1 1 0 011 1v5a1 1 0 01-1 1H6l-3 3V5a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  ),
+  plan: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="4" y="3" width="8" height="11" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6 6h4M6 9h4M6 12h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ),
+  acceptEdits: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M9 2L3 9h4l-1 5 6-7H8l1-5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  ),
+};
+
+function ModeSelector({
+  value,
+  onChange,
+}: {
+  value: GuiPermissionMode;
+  onChange: (v: GuiPermissionMode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = () => setOpen(false);
+    const t = setTimeout(() => document.addEventListener('click', onDoc), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', onDoc);
+    };
+  }, [open]);
+  const current = GUI_PERMISSION_MODES.find((m) => m.id === value) ?? GUI_PERMISSION_MODES[0];
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="inline-flex items-center gap-1.5 rounded-full border border-border-cream bg-white px-2.5 py-1 font-sans text-[12px] text-near hover:bg-sand"
+        title={current.blurb}
+      >
+        <span className="text-stone">{MODE_ICONS[current.id]}</span>
+        <span className="font-medium">{current.label}</span>
+        <span aria-hidden="true" className="text-stone">▾</span>
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute left-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
+        >
+          {GUI_PERMISSION_MODES.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => {
+                onChange(m.id);
+                setOpen(false);
+              }}
+              className={
+                'flex w-full items-start gap-2 px-3 py-2 text-left font-sans text-[12px] hover:bg-sand ' +
+                (m.id === value ? 'bg-ivory' : '')
+              }
+            >
+              <span className="mt-0.5 shrink-0 text-stone">{MODE_ICONS[m.id]}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium text-near">{m.label}</span>
+                <span className="block font-sans text-[11px] text-stone">{m.blurb}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Stable color for a project id — hash → HSL so every project has its own
+ *  subtle tone, avoiding a generic folder icon. */
+function projectColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360}, 38%, 58%)`;
 }
 
 /** Returns slash-trigger state if the caret follows a `/` that starts at the

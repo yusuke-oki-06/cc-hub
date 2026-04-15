@@ -7,9 +7,9 @@ import { z } from 'zod';
  * forward-compatible with minor version bumps.
  */
 export const CLAUDE_MODELS = [
-  { id: 'opus', label: 'Opus — 最も高精度', blurb: '複雑な解析・長文理解・ビジネス文脈' },
-  { id: 'sonnet', label: 'Sonnet — バランス型', blurb: '日常的なファイル解析と軽めのコード作業' },
-  { id: 'haiku', label: 'Haiku — 高速・低コスト', blurb: '要約・短い応答・繰り返しタスク' },
+  { id: 'opus', label: 'Opus 4.6', blurb: '複雑な解析・長文理解・ビジネス文脈' },
+  { id: 'sonnet', label: 'Sonnet 4.6', blurb: '日常のファイル解析と軽めのコード作業' },
+  { id: 'haiku', label: 'Haiku 4.5', blurb: '要約・短い応答・繰り返しタスク' },
 ] as const;
 
 export type ClaudeModelId = (typeof CLAUDE_MODELS)[number]['id'];

@@ -129,10 +129,10 @@ td {
   }
 }
 
-/* Ring focus */
+/* Ring focus — テーマの暖色ストーン。青色を避けサイト全体の色と揃える。 */
 *:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px #3898ec;
+  box-shadow: 0 0 0 2px rgba(140, 122, 94, 0.55);
   border-radius: 4px;
 }
 
