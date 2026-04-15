@@ -348,7 +348,7 @@ function SessionRow({
     <li className="group relative">
       <div
         className={cn(
-          'flex min-w-0 items-start gap-1.5 rounded-card py-1.5 pl-2 pr-1 font-sans text-[12.5px] leading-[1.35] text-charcoal hover:bg-ivory',
+          'flex min-w-0 items-start gap-1.5 rounded-card py-1.5 pl-2 pr-0 font-sans text-[12.5px] leading-[1.35] text-charcoal hover:bg-ivory',
           active ? 'bg-ivory text-near shadow-[0_0_0_1px_#d1cfc5]' : '',
         )}
       >
@@ -377,7 +377,7 @@ function SessionRow({
             e.stopPropagation();
             setMenuOpen((v) => !v);
           }}
-          className="ml-auto -mr-0.5 shrink-0 rounded p-1 text-stone opacity-0 transition hover:bg-sand hover:text-charcoal group-hover:opacity-100"
+          className="ml-auto -mr-1.5 shrink-0 rounded p-1 text-stone opacity-0 transition hover:bg-sand hover:text-charcoal group-hover:opacity-100"
           aria-label="セッションメニュー"
         >
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
