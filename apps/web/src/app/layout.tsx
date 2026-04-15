@@ -14,7 +14,7 @@ const themeBootstrap = `(function(){try{var t=localStorage.getItem('cc-hub-theme
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja">
+    <html lang="ja" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>

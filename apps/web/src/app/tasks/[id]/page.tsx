@@ -303,7 +303,9 @@ export default function TaskView() {
                   renderInline={(i) => <PermissionInlineCard item={i} sessionId={sessionId} />}
                 />
               ))}
-              {isRunning && showThinking(timeline) && <ChatThinking />}
+              {isRunning && showThinking(timeline) && (
+                <ChatThinking onStop={sessionId ? onAbort : undefined} />
+              )}
               {timeline.length === 0 && !isRunning && !sessionId && (
                 <div className="py-10 text-center font-sans text-[13px] text-stone">
                   セッションを準備中…

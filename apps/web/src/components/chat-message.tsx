@@ -242,16 +242,36 @@ function CopyGlyph() {
   );
 }
 
-/** Thinking indicator placed after the last message while Claude is working. */
-export function ChatThinking() {
+/**
+ * Thinking indicator placed after the last message while Claude is working.
+ * When `onStop` is provided, a square Stop button appears on the right so
+ * the user can cancel the ongoing turn without hunting for the header's
+ * abort button. (claude.ai-style mid-generation stop affordance.)
+ */
+export function ChatThinking({ onStop }: { onStop?: () => void | Promise<void> }) {
   return (
-    <div className="flex items-center gap-2 pl-1 py-2 font-sans text-[13px] text-olive">
-      <span className="inline-flex gap-[3px]">
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.3s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.15s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta" />
-      </span>
-      <span className="text-stone">Claude が考えています…</span>
+    <div className="flex items-center justify-between gap-2 pl-1 py-2 font-sans text-[13px] text-olive">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex gap-[3px]">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.3s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.15s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta" />
+        </span>
+        <span className="text-stone">Claude が考えています…</span>
+      </div>
+      {onStop && (
+        <button
+          type="button"
+          onClick={() => void onStop()}
+          title="応答を停止"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border-warm bg-white px-3 py-1 font-sans text-[12px] text-charcoal transition hover:bg-sand"
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="7" height="7" rx="1" fill="currentColor" />
+          </svg>
+          停止
+        </button>
+      )}
     </div>
   );
 }

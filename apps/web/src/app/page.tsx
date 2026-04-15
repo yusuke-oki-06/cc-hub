@@ -143,7 +143,7 @@ export default function Home() {
   };
 
   return (
-    <div className="mx-auto max-w-[860px] px-8 py-12">
+    <div className="mx-auto flex min-h-screen max-w-[860px] flex-col justify-center px-8 pt-16 pb-12">
       <TokenSetup />
 
       <header className="mb-10 mt-2 text-center">
