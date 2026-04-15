@@ -136,17 +136,6 @@ export default function AdminInsights() {
       <header className="flex items-start justify-between gap-4 border-b border-border-warm pb-4">
         <div>
           <h1 className="font-serif text-[36px] leading-[1.1] text-near">利用状況</h1>
-          <p className="mt-1 font-sans text-[12px] text-stone">
-            投資対効果を経営層に示すための集計。時給単価は組織・案件で異なるため、ここでは時間と投資額をそのまま提示します。詳細な trace は{' '}
-            <a
-              href={process.env.NEXT_PUBLIC_LANGFUSE_URL ?? 'http://localhost:3100'}
-              target="_blank"
-              rel="noreferrer"
-              className="underline text-terracotta"
-            >
-              Langfuse ↗
-            </a>
-          </p>
         </div>
         <button
           type="button"
