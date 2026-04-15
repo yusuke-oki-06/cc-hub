@@ -10,6 +10,23 @@ interface MonthRow {
   taskCount: number;
   succeededCount: number;
   activeUsers: number;
+  savedMinutes: number;
+}
+
+interface TopUser {
+  userId: string;
+  displayName: string | null;
+  taskCount: number;
+  succeededCount: number;
+  costUsd: number;
+  timeSavedMinutes: number;
+}
+
+interface ModelRow {
+  model: string;
+  count: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 interface Usage {
@@ -21,13 +38,15 @@ interface Usage {
   activeUsers: number;
   timeSavedMinutesMonth: number;
   timeSavedMinutesPrevMonth: number;
-  minutesSavedPerTask: number;
+  avgSavedMinutesPerTask: number;
   succeededCountMonth: number;
   successRateMonth: number;
   totalCostUsd: number;
   topTasks: Array<{ taskId: string; prompt: string; costUsd: number; createdAt: string }>;
   perDay: Array<{ day: string; cost: number; tasks: number }>;
   perMonth: MonthRow[];
+  topUsers: TopUser[];
+  modelBreakdown: ModelRow[] | null;
 }
 
 interface RoiSettings {
@@ -66,9 +85,12 @@ function percent(n: number, digits = 1): string {
   return `${(n * 100).toFixed(digits)}%`;
 }
 
-function deltaBadge(now: number, prev: number): { label: string; tone: 'up' | 'down' | 'flat' } {
-  if (prev <= 0 && now <= 0) return { label: '—', tone: 'flat' };
-  if (prev <= 0) return { label: '新規', tone: 'up' };
+function deltaBadge(
+  now: number,
+  prev: number,
+): { label: string; tone: 'up' | 'down' | 'flat' } | null {
+  // 前月データが無い場合はバッジを出さない (従来の「新規」表記は意味が薄いため削除)。
+  if (prev <= 0) return null;
   const delta = (now - prev) / prev;
   if (Math.abs(delta) < 0.005) return { label: 'ほぼ横ばい', tone: 'flat' };
   const sign = delta >= 0 ? '▲' : '▼';
@@ -122,10 +144,7 @@ export default function AdminInsights() {
   const maxMonthSpendJpy =
     Math.max(0.01, ...(u?.perMonth ?? []).map((m) => m.costUsd * settings.fxJpyPerUsd));
   const maxMonthHours =
-    Math.max(
-      0.01,
-      ...(u?.perMonth ?? []).map((m) => (m.succeededCount * (u?.minutesSavedPerTask ?? 30)) / 60),
-    );
+    Math.max(0.01, ...(u?.perMonth ?? []).map((m) => m.savedMinutes / 60));
   const maxCost = Math.max(0.01, ...(u?.perDay.map((p) => p.cost) ?? [0]));
 
   return (
@@ -167,10 +186,14 @@ export default function AdminInsights() {
               />
             </label>
             <div className="block font-sans text-[12px] text-stone">
-              <span className="mb-1 block">タスクあたり削減時間 (推定)</span>
-              <div className="rounded-card border border-border-cream bg-ivory px-3 py-1.5 font-mono text-[13px] text-near">
-                {u?.minutesSavedPerTask ?? 30} 分
-                <span className="ml-2 font-sans text-[11px] text-stone">server-side</span>
+              <span className="mb-1 block">削減時間の推定方法</span>
+              <div className="rounded-card border border-border-cream bg-ivory px-3 py-1.5 font-sans text-[12px] leading-[1.5] text-near">
+                <div>
+                  タスクごとに <code className="font-mono text-[11px]">max(10, min(180, 実行時間 × 3 + 出力トークン × 0.005))</code> 分
+                </div>
+                <div className="mt-0.5 text-[11px] text-stone">
+                  成功タスクのみ対象・今月平均 {u?.avgSavedMinutesPerTask ?? 0} 分/件
+                </div>
               </div>
             </div>
           </div>
@@ -184,10 +207,10 @@ export default function AdminInsights() {
           value={u ? formatTime(u.timeSavedMinutesMonth) : '…'}
           delta={u ? deltaBadge(u.timeSavedMinutesMonth, u.timeSavedMinutesPrevMonth) : undefined}
           accent="olive"
-          subline={u ? `完了 ${u.succeededCountMonth} 件 × 人手 ${u.minutesSavedPerTask} 分/件の概算` : undefined}
+          subline={u ? `完了 ${u.succeededCountMonth} 件 / 平均 ${u.avgSavedMinutesPerTask} 分/件 (実行時間と出力量から算出)` : undefined}
         />
         <HeroCard
-          label="今月の Claude 投資額"
+          label="今月の Claude 利用料"
           value={derived ? yen(derived.spendJpy) : '…'}
           delta={derived ? deltaBadge(derived.spendJpy, derived.prevSpendJpy) : undefined}
           accent="terracotta"
@@ -198,7 +221,7 @@ export default function AdminInsights() {
       {/* ② 効率・予測 */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatCard
-          label="1 時間削減あたり投資額"
+          label="1 時間削減あたり利用料"
           value={
             derived?.costPerHourSaved == null
               ? '—'
@@ -212,7 +235,7 @@ export default function AdminInsights() {
           hint="直近月ペース × 12"
         />
         <StatCard
-          label="年間の Claude 投資額予測"
+          label="年間の Claude 利用料予測"
           value={derived ? yen(derived.annualSpendJpy) : '…'}
           hint="直近月ペース × 12"
         />
@@ -251,12 +274,12 @@ export default function AdminInsights() {
         <CardHeader>
           <CardTitle>直近 6 ヶ月の推移</CardTitle>
           <span className="font-sans text-[11px] text-stone">
-            上段=稼働削減時間 / 下段=Claude 投資額 (¥)
+            上段=稼働削減時間 / 下段=Claude 利用料 (¥)
           </span>
         </CardHeader>
         <div className="space-y-3">
           {(u?.perMonth ?? []).map((m) => {
-            const hours = (m.succeededCount * (u?.minutesSavedPerTask ?? 30)) / 60;
+            const hours = m.savedMinutes / 60;
             const spendJpy = m.costUsd * settings.fxJpyPerUsd;
             const hoursPct = (hours / maxMonthHours) * 100;
             const spendPct = (spendJpy / maxMonthSpendJpy) * 100;
@@ -275,7 +298,7 @@ export default function AdminInsights() {
                     <div
                       className="absolute left-0 top-0 h-3 rounded-sm bg-terracotta/70"
                       style={{ width: `${spendPct}%` }}
-                      title={`投資額 ${yen(spendJpy)}`}
+                      title={`利用料 ${yen(spendJpy)}`}
                     />
                   </div>
                 </div>
@@ -292,7 +315,77 @@ export default function AdminInsights() {
         </div>
       </Card>
 
-      {/* ⑤ 既存: 日次 + Top tasks */}
+      {/* ⑤ Top ユーザー + モデル別 (Langfuse trace より) */}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Top ユーザー (今月)</CardTitle>
+            <span className="font-sans text-[11px] text-stone">成功タスク数・削減時間</span>
+          </CardHeader>
+          {u && u.topUsers.length > 0 ? (
+            <ol className="space-y-1.5 font-sans text-[13px]">
+              {u.topUsers.map((tu, i) => (
+                <li
+                  key={tu.userId}
+                  className="flex items-center justify-between gap-3 rounded-card px-2 py-1.5 hover:bg-sand"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="w-5 shrink-0 text-center font-serif text-[14px] text-terracotta">
+                      {i + 1}
+                    </span>
+                    <span className="truncate font-medium text-near">
+                      {tu.displayName ?? tu.userId.slice(0, 8)}
+                    </span>
+                  </div>
+                  <div className="shrink-0 text-right font-mono text-[11px] text-stone">
+                    <span className="text-[#3f5a24] tabular-nums">
+                      {formatTime(tu.timeSavedMinutes)}
+                    </span>
+                    <span className="mx-1 text-stone/60">/</span>
+                    <span className="tabular-nums">{tu.succeededCount}/{tu.taskCount} 件</span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div className="py-6 text-center font-sans text-[12px] text-stone">データなし</div>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>モデル別 利用 (今月)</CardTitle>
+            <span className="font-sans text-[11px] text-stone">Langfuse トレースから集計</span>
+          </CardHeader>
+          {u?.modelBreakdown === null ? (
+            <div className="py-6 text-center font-sans text-[12px] text-stone">
+              Langfuse 未設定 or 接続不可
+            </div>
+          ) : u?.modelBreakdown && u.modelBreakdown.length > 0 ? (
+            <ul className="space-y-1.5 font-sans text-[13px]">
+              {u.modelBreakdown.slice(0, 6).map((m) => (
+                <li
+                  key={m.model}
+                  className="flex items-center justify-between gap-3 rounded-card px-2 py-1.5 hover:bg-sand"
+                >
+                  <span className="truncate font-mono text-[12px] text-near">{m.model}</span>
+                  <span className="shrink-0 text-right font-mono text-[11px] text-stone">
+                    <span className="tabular-nums text-near">{m.count} 回</span>
+                    <span className="mx-1 text-stone/60">·</span>
+                    <span className="tabular-nums">in {m.inputTokens.toLocaleString()}</span>
+                    <span className="mx-0.5 text-stone/60">/</span>
+                    <span className="tabular-nums">out {m.outputTokens.toLocaleString()}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="py-6 text-center font-sans text-[12px] text-stone">データなし</div>
+          )}
+        </Card>
+      </section>
+
+      {/* ⑥ 既存: 日次 + Top tasks */}
       <Card>
         <CardHeader>
           <CardTitle>直近 28 日の日次コスト</CardTitle>
@@ -356,7 +449,7 @@ function HeroCard({
   label: string;
   value: string;
   subline?: string;
-  delta?: { label: string; tone: 'up' | 'down' | 'flat' };
+  delta?: { label: string; tone: 'up' | 'down' | 'flat' } | null;
   accent: 'terracotta' | 'olive';
 }) {
   const accentClass =

@@ -56,6 +56,89 @@ async function resolveProjectId(): Promise<string | null> {
   }
 }
 
+/** Aggregated model usage since the start of the current month. Fetches
+ *  GENERATION observations from Langfuse's public API (paginated) and groups
+ *  by model name. Returns null when Langfuse is not configured. */
+export async function getModelBreakdownSinceMonth(): Promise<
+  Array<{ model: string; count: number; inputTokens: number; outputTokens: number }> | null
+> {
+  const host = process.env.LANGFUSE_HOST;
+  const pk = process.env.LANGFUSE_PUBLIC_KEY;
+  const sk = process.env.LANGFUSE_SECRET_KEY;
+  if (!host || !pk || !sk) return null;
+  const auth = 'Basic ' + Buffer.from(`${pk}:${sk}`).toString('base64');
+  // Start of this month in ISO (UTC).
+  const now = new Date();
+  const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const agg = new Map<
+    string,
+    { count: number; inputTokens: number; outputTokens: number }
+  >();
+  const limit = 100;
+  const maxPages = 20; // cap to keep dashboard snappy; ~2000 generations
+  for (let page = 1; page <= maxPages; page++) {
+    const url = `${host.replace(/\/$/, '')}/api/public/observations?type=GENERATION&fromStartTime=${encodeURIComponent(since)}&limit=${limit}&page=${page}`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { Authorization: auth },
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (err) {
+      console.warn('[langfuse] observations fetch failed', err);
+      return null;
+    }
+    if (!res.ok) {
+      console.warn(`[langfuse] observations returned ${res.status}`);
+      return null;
+    }
+    const body = (await res.json()) as {
+      data?: Array<{
+        model?: string | null;
+        usage?: {
+          input?: number;
+          output?: number;
+          total?: number;
+          promptTokens?: number;
+          completionTokens?: number;
+          inputTokens?: number;
+          outputTokens?: number;
+        } | null;
+        promptTokens?: number;
+        completionTokens?: number;
+      }>;
+      meta?: { totalPages?: number; totalItems?: number };
+    };
+    const rows = body.data ?? [];
+    for (const r of rows) {
+      const model = r.model ?? 'unknown';
+      const a = agg.get(model) ?? { count: 0, inputTokens: 0, outputTokens: 0 };
+      a.count += 1;
+      // Langfuse observation schema varies across versions/SDKs — try all
+      // known field names to capture input/output token counts.
+      a.inputTokens +=
+        r.usage?.input ??
+        r.usage?.inputTokens ??
+        r.usage?.promptTokens ??
+        r.promptTokens ??
+        0;
+      a.outputTokens +=
+        r.usage?.output ??
+        r.usage?.outputTokens ??
+        r.usage?.completionTokens ??
+        r.completionTokens ??
+        0;
+      agg.set(model, a);
+    }
+    if (rows.length < limit) break;
+    const totalPages = body.meta?.totalPages;
+    if (typeof totalPages === 'number' && page >= totalPages) break;
+  }
+  return Array.from(agg.entries())
+    .map(([model, v]) => ({ model, ...v }))
+    .sort((a, b) => b.count - a.count);
+}
+
 export async function langfuseDeepLink(traceId: string): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_LANGFUSE_URL ?? process.env.LANGFUSE_HOST ?? null;
   if (!base) return null;
@@ -76,6 +159,7 @@ export function startSessionTrace(input: {
   userId: string;
   profileId: string;
   prompt: string;
+  projectId?: string | null;
 }): SessionTraceContext {
   const lf = getClient();
   if (!lf) {
@@ -92,7 +176,11 @@ export function startSessionTrace(input: {
     userId: input.userId,
     sessionId: input.sessionId,
     input: { prompt: input.prompt, profileId: input.profileId, taskId: input.taskId },
-    metadata: { profileId: input.profileId, taskId: input.taskId },
+    metadata: {
+      profileId: input.profileId,
+      taskId: input.taskId,
+      projectId: input.projectId ?? null,
+    },
   });
 
   const activeSpans = new Map<string, ReturnType<(typeof trace)['span']>>();
@@ -106,14 +194,27 @@ export function startSessionTrace(input: {
     observeEvent: (event) => {
       try {
         if (event.type === 'assistant' || event.type === 'message') {
-          const usage = (event as { usage?: { input_tokens?: number; output_tokens?: number } })
-            .usage;
+          // Anthropic splits input tokens into base / cache-read / cache-creation.
+          // Include all three in the Langfuse "input" count so model-usage
+          // volume reflects total context consumed (exec dashboard).
+          const u = (event as {
+            usage?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_read_input_tokens?: number;
+              cache_creation_input_tokens?: number;
+            };
+          }).usage;
           const model = (event as { message?: { model?: string } }).message?.model;
+          const inputTotal =
+            (u?.input_tokens ?? 0) +
+            (u?.cache_read_input_tokens ?? 0) +
+            (u?.cache_creation_input_tokens ?? 0);
           trace.generation({
             name: 'assistant.message',
             model,
-            usage: usage
-              ? { input: usage.input_tokens ?? 0, output: usage.output_tokens ?? 0, unit: 'TOKENS' }
+            usage: u
+              ? { input: inputTotal, output: u.output_tokens ?? 0, unit: 'TOKENS' }
               : undefined,
             output: event,
           });

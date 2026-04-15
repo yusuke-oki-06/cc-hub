@@ -358,12 +358,18 @@ async function runTurn(
     WHERE id = ${session.sessionId}::uuid
   `;
 
+  // Look up projectId from the task so Langfuse traces can be grouped by
+  // project later (used for per-project ROI breakdown in admin/insights).
+  const [projRow] = await sql<{ project_id: string | null }[]>`
+    SELECT project_id::text FROM tasks WHERE id = ${session.taskId}::uuid LIMIT 1
+  `;
   const traceCtx = startSessionTrace({
     sessionId: session.sessionId,
     taskId: session.taskId,
     userId: session.userId,
     profileId: profile.id,
     prompt: opts.prompt,
+    projectId: projRow?.project_id ?? null,
   });
 
   // Emit a standalone system.init event carrying the Langfuse trace URL so
