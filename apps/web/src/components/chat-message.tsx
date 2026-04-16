@@ -36,6 +36,9 @@ interface Props {
  */
 export function ChatMessage({ item, renderInline }: Props) {
   if (item.kind === 'hidden') return null;
+  if (item.kind === 'user_question' && renderInline) {
+    return <>{renderInline(item)}</>;
+  }
   if (item.kind === 'permission' && renderInline) {
     return <div className="my-1">{renderInline(item)}</div>;
   }

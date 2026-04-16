@@ -6,6 +6,7 @@ export type FriendlyKind =
   | 'tool.running'
   | 'tool.finished'
   | 'permission'
+  | 'user_question'  // AskUserQuestion: 質問 + 選択肢を対話的に描画
   | 'result.success'
   | 'result.failure'
   | 'guardrail'
@@ -61,6 +62,17 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
       }
       if (tools.length > 0) {
         const first = tools[0] as { name?: string; input?: Record<string, unknown>; id?: string } | undefined;
+        // AskUserQuestion は対話的選択肢 UI として描画する。
+        if (first?.name === 'AskUserQuestion') {
+          return {
+            seq: ev.seq,
+            kind: 'user_question',
+            title: 'Claude からの質問',
+            data: first.input,
+            toolUseId: first.id,
+            meta: time,
+          };
+        }
         return {
           seq: ev.seq,
           kind: 'tool.running',
@@ -73,6 +85,16 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
     }
 
     case 'tool_use': {
+      if (payload.name === 'AskUserQuestion') {
+        return {
+          seq: ev.seq,
+          kind: 'user_question',
+          title: 'Claude からの質問',
+          data: payload.input,
+          toolUseId: (payload.id as string) ?? undefined,
+          meta: time,
+        };
+      }
       return {
         seq: ev.seq,
         kind: 'tool.running',
@@ -143,14 +165,13 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
           meta: time,
         };
       }
+      // Claude Code CLI 側は turn 終了を静かに結ぶので、UI で
+      // "●完了しました" を合成するのは不自然。完全に非表示にする。
+      // failure 時のエラー表示は下で別途行う。
       return {
         seq: ev.seq,
-        kind: ok ? 'result.success' : 'hidden',
-        title: '完了しました',
-        // body は保持するが、buildTimeline 側で「直前の assistant と同じ
-        // テキスト」だと判定できた場合に落とす。これにより assistant が
-        // ストリームされないエッジケースで要約テキストが失われない。
-        body: typeof text === 'string' ? text : undefined,
+        kind: 'hidden',
+        title: ok ? 'result.success' : 'result.unknown',
         meta: time,
       };
     }

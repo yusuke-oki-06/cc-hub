@@ -358,7 +358,21 @@ export default function TaskView() {
                 <ChatMessage
                   key={it.seq}
                   item={it}
-                  renderInline={(i) => <PermissionInlineCard item={i} sessionId={sessionId} />}
+                  renderInline={(i) => {
+                    if (i.kind === 'user_question') {
+                      return (
+                        <UserQuestionCard
+                          item={i}
+                          onChoose={(answer) => {
+                            // 選択肢を押したら composer に流し込まれたかのように
+                            // そのまま 1 ターン分の user message として送信する。
+                            void sendPrompt({ text: answer });
+                          }}
+                        />
+                      );
+                    }
+                    return <PermissionInlineCard item={i} sessionId={sessionId} />;
+                  }}
                 />
               ))}
               {isRunning && showThinking(timeline) && (
@@ -506,6 +520,62 @@ function ShortcutButton({
   );
 }
 
+
+/** Claude が AskUserQuestion で質問を投げた時に、タイムライン内に
+ *  選択肢をクリック可能なカードとして描画する。クリックで選んだ答えを
+ *  次の user message として sendPrompt に流し込む。 */
+function UserQuestionCard({
+  item,
+  onChoose,
+}: {
+  item: FriendlyItem;
+  onChoose: (answer: string) => void;
+}) {
+  const input = item.data as
+    | {
+        questions?: Array<{
+          question: string;
+          header?: string;
+          options: Array<{ label: string; description?: string }>;
+          multiSelect?: boolean;
+        }>;
+      }
+    | undefined;
+  const questions = input?.questions ?? [];
+  if (questions.length === 0) return null;
+  return (
+    <div className="space-y-3 rounded-card border border-border-warm bg-ivory p-4 shadow-whisper">
+      <div className="flex items-center gap-2 font-sans text-[11px] uppercase tracking-[0.6px] text-stone">
+        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-terracotta/15 text-[10px] text-terracotta">
+          ?
+        </span>
+        <span>Claude からの質問</span>
+      </div>
+      {questions.map((q, qi) => (
+        <div key={qi} className="space-y-2">
+          <div className="font-sans text-[14px] leading-[1.5] text-near">{q.question}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {q.options.map((o, oi) => (
+              <button
+                key={oi}
+                type="button"
+                onClick={() => onChoose(o.label)}
+                title={o.description}
+                className="group inline-flex items-start gap-1.5 rounded-full border border-border-cream bg-white px-3 py-1.5 text-left font-sans text-[13px] text-charcoal transition hover:border-terracotta hover:bg-[#fbece4]"
+              >
+                <span className="shrink-0 text-stone group-hover:text-terracotta">→</span>
+                <span>{o.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <p className="font-sans text-[11px] text-stone">
+        選択肢をクリックすると、その選択がそのまま返答として送信されます。自由入力で答える場合は下の入力欄に書いてください。
+      </p>
+    </div>
+  );
+}
 
 function PermissionInlineCard({
   item,
