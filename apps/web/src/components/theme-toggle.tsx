@@ -57,7 +57,7 @@ export function ThemeToggle() {
             hydrated && theme === 'parchment' ? 'var(--text)' : 'var(--text-muted)',
         }}
       >
-        Parchment
+        Warm Sand
       </button>
       <button
         type="button"
@@ -70,7 +70,7 @@ export function ThemeToggle() {
             hydrated && theme === 'airbnb' ? '#ffffff' : 'var(--text-muted)',
         }}
       >
-        Airbnb
+        Coral White
       </button>
     </div>
   );
