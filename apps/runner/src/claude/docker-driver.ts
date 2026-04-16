@@ -185,13 +185,18 @@ async function startClaudeExec(
 
   const duplex = (await exec.start({ hijack: true, stdin: true, Tty: true })) as NodeJS.ReadWriteStream;
 
-  // 対話モードで起動した CLI の stdin にプロンプトを送信。
-  // CLI が入力待ちになるまで少し待ってから書き込む。
-  setTimeout(() => {
+  // 対話モードで起動した CLI はオンボーディング画面 (テーマ選択) が出ること
+  // がある。Enter を送って既定テーマを選択し抜ける。その後プロンプトを送信。
+  const writeIfOpen = (text: string) => {
     if ((duplex as unknown as { writable?: boolean }).writable !== false) {
-      duplex.write(input.prompt + '\n');
+      duplex.write(text);
     }
-  }, 1500);
+  };
+  // Step 1: オンボーディング通過 (Enter × 2 で既定値を承認)
+  setTimeout(() => writeIfOpen('\n'), 800);
+  setTimeout(() => writeIfOpen('\n'), 1200);
+  // Step 2: プロンプト送信 (CLI がプロンプト入力待ちになる頃)
+  setTimeout(() => writeIfOpen(input.prompt + '\n'), 3000);
 
   // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
   // 全出力をそのまま terminal.data イベントとして転送する。
