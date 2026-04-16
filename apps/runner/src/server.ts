@@ -337,6 +337,14 @@ async function runTurn(
   console.log(
     `[runTurn] session=${session.sessionId.slice(0, 8)} task=${session.taskId.slice(0, 8)} profile=${profile.id} model=${ov.model ?? '(default)'} mode=${ov.permissionMode ?? 'default'} firstTurn=${opts.isFirstTurn} resume=${session.claudeSessionId ?? 'none'} allowedTools=${allowedTools.length} prompt="${opts.prompt.slice(0, 80)}"`,
   );
+  // MCP サーバ設定 — Slack 等 Remote MCP を使えるようにする。
+  // 将来は profile.mcpServers から動的に読む。
+  const mcpConfig = {
+    mcpServers: {
+      slack: { url: 'https://mcp.slack.com/mcp' },
+    },
+  };
+
   const exec = await session.sandbox.execClaude({
     prompt: opts.prompt,
     allowedTools,
@@ -346,6 +354,7 @@ async function runTurn(
     timeLimitSeconds: profile.timeLimitSeconds,
     model: ov.model,
     permissionMode: ov.permissionMode,
+    mcpConfig,
   });
   session.claudeExec = exec;
   console.log(`[runTurn] exec started id=${exec.execId} session=${session.sessionId.slice(0, 8)}`);

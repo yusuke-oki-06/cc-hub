@@ -40,6 +40,8 @@ export interface ClaudeExecInput {
   model?: string;
   /** Claude CLI permission mode. 'bypassPermissions' is intentionally unsupported here. */
   permissionMode?: 'default' | 'plan' | 'acceptEdits';
+  /** MCP servers config (JSON object passed to --mcp-config). */
+  mcpConfig?: Record<string, unknown>;
 }
 
 export interface ClaudeExecHandle {
@@ -155,6 +157,13 @@ async function startClaudeExec(
   if (input.model) args.push('--model', input.model);
   if (input.permissionMode && input.permissionMode !== 'default') {
     args.push('--permission-mode', input.permissionMode);
+  }
+
+  // MCP サーバ設定 — credentials.json に OAuth が入っている MCP サーバを
+  // CLI に認識させる。Slack / Notion 等はホスト上で一度 OAuth 完了していれば
+  // そのまま使える。
+  if (input.mcpConfig) {
+    args.push('--mcp-config', JSON.stringify(input.mcpConfig));
   }
 
   const exec = await container.exec({
