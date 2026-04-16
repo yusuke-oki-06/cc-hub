@@ -100,22 +100,26 @@ export async function createSandbox(input: CreateSandboxInput): Promise<SandboxH
 
   await container.start();
 
-  // CLI の初回セットアップ (テーマ選択 / オンボーディング) をスキップするため
-  // settings.json を事前配置する。これが無いと対話モードで TUI セットアップ
-  // ウィザードが出てしまう。
+  // CLI の初回セットアップ (テーマ選択 / オンボーディング) をスキップするため、
+  // `-p "init"` でダミー実行して初期化ファイル群を生成させる。
+  // これにより interactive モードでもオンボーディングが出なくなる。
   try {
-    const setupExec = await container.exec({
-      Cmd: [
-        'sh',
-        '-c',
-        'mkdir -p /home/app/.claude && echo \'{"theme":"dark","hasCompletedOnboarding":true}\' > /home/app/.claude/settings.json',
-      ],
-      AttachStdout: false,
-      AttachStderr: false,
+    const initExec = await container.exec({
+      Cmd: ['claude', '-p', 'respond with OK', '--max-turns=1'],
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
     });
-    await setupExec.start({});
+    const initStream = await initExec.start({});
+    await new Promise<void>((resolve) => {
+      initStream.on('end', resolve);
+      initStream.on('error', resolve);
+      // 安全弁: 15 秒で打ち切り
+      setTimeout(resolve, 15_000);
+    });
+    console.log('[docker-driver] CLI init (onboarding skip) completed');
   } catch (err) {
-    console.warn('[docker-driver] failed to inject claude settings', err);
+    console.warn('[docker-driver] CLI init failed (onboarding may appear)', err);
   }
 
   return {
@@ -182,6 +186,7 @@ async function startClaudeExec(
     AttachStderr: true,
     Tty: true,
     WorkingDir: '/workspace',
+    Env: ['TERM=xterm-256color', 'COLUMNS=120', 'LINES=40'],
   });
 
   const duplex = (await exec.start({ hijack: true, stdin: true, Tty: true })) as NodeJS.ReadWriteStream;
