@@ -162,9 +162,13 @@ async function startClaudeExec(
   // 対話モード (--print なし) で起動し、stdin 経由で prompt を送信する。
   // これにより CLI の完全な TUI (スパークル、色分け、タスクリスト等) が
   // ANSI エスケープとして出力される。
-  // Interactive mode (no -p) で TUI の完全な描画を得る。
-  // オンボーディング画面は ANSI 出力を監視して自動で Enter を送信して抜ける。
+  // -p (print) mode + Tty: true — 安定動作を優先。
+  // Interactive mode は OAuth 再認証 / オンボーディングが避けられないため使わない。
+  // -p + Tty: true で markdown のカラー出力は得られる。
+  // 将来 CLI 側に --no-onboarding / --headless-interactive が追加されたら切り替える。
   const args: string[] = [
+    '-p',
+    input.prompt,
     `--max-turns=${input.maxTurns}`,
   ];
   if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
@@ -195,55 +199,7 @@ async function startClaudeExec(
   // Interactive mode: ANSI 出力を監視して状態を検出し、適切な入力を送る。
   // 1. オンボーディング画面 ("Choose the text style") → Enter で既定テーマ選択
   // 2. プロンプト入力待ち (> や空行) → ユーザーのプロンプトを送信
-  let onboardingHandled = false;
-  let promptSent = false;
-  let outputBuffer = '';
-
-  const writeIfOpen = (text: string) => {
-    if ((duplex as unknown as { writable?: boolean }).writable !== false) {
-      duplex.write(text);
-    }
-  };
-
-  // オンボーディング突破: Enter を定期的に送信 (500ms 間隔 × 最大 10 回)。
-  // CLI のプロンプト入力待ち (❯ マーカー + /workspace パス) を検出したら
-  // ユーザーのプロンプトを送信する。
-  let enterInterval: ReturnType<typeof setInterval> | undefined;
-  enterInterval = setInterval(() => {
-    if (promptSent) {
-      if (enterInterval) clearInterval(enterInterval);
-      return;
-    }
-    // プロンプト待ちになったか判定
-    // /workspace が見えてかつオンボーディング関連テキストが直近に無ければ
-    // CLI のメインプロンプトに到達したと判断
-    const recent = outputBuffer.slice(-500);
-    if (
-      (outputBuffer.includes('/workspace') || outputBuffer.includes('What can I help')) &&
-      !recent.includes('Choose the text style') &&
-      !recent.includes('subscription')
-    ) {
-      promptSent = true;
-      if (enterInterval) clearInterval(enterInterval);
-      setTimeout(() => writeIfOpen(input.prompt + '\r'), 300);
-      return;
-    }
-    // まだオンボーディング中 → Enter で次へ
-    writeIfOpen('\r');
-  }, 600);
-
-  duplex.on('data', (chunk: Buffer) => {
-    outputBuffer += chunk.toString('utf8');
-  });
-
-  // フォールバック: 10 秒後にまだプロンプト未送信なら強制送信
-  setTimeout(() => {
-    if (!promptSent) {
-      promptSent = true;
-      if (enterInterval) clearInterval(enterInterval);
-      writeIfOpen(input.prompt + '\r');
-    }
-  }, 10000);
+  // -p mode: プロンプトは CLI 引数で渡済み。stdin 自動入力は不要。
 
   // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
   // 全出力をそのまま terminal.data イベントとして転送する。
