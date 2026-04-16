@@ -10,7 +10,7 @@ export interface CreateSandboxInput {
   sessionId: string;
   profileId: string;
   image: string;                     // e.g. 'cc-hub-sandbox:0.1.0'
-  credentialsHostPath: string;       // e.g. 'C:\\Users\\koori\\.claude\\.credentials.json'
+  credentialsHostPath: string;       // e.g. '~/.claude/.credentials.json'
   hookUrl: string;                   // e.g. 'http://host.docker.internal:4000'
   hookToken: string;
   memoryMb: number;                  // e.g. 4096

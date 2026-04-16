@@ -70,9 +70,9 @@
 - container 内で app user がこのファイルを書き換えれば hook を無効化できる
 - 緩和: 起動時に Runner が injection 済み、Claude 本体が load 済み
 
-### R6. Langfuse セルフホストのデフォルト認証情報 (高, ローカルのみ)
-- docker-compose に `LANGFUSE_INIT_USER_PASSWORD: cchub-local-password` が平文、`NEXTAUTH_SECRET`/`ENCRYPTION_KEY` ゼロ埋め
-- 緩和: localhost only、外部公開しないことで受容
+### R6. Langfuse セルフホストのデフォルト認証情報 (修正済み)
+- docker-compose のシークレットは `${VAR:?set VAR in .env}` パターンに修正済み
+- `.env` ファイルは `.gitignore` で除外
 
 ### R7. 単一ユーザー / RBAC なし (構造的)
 - 固定 Bearer token 一本、`users.role` 列はあるが enforce していない
