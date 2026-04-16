@@ -340,8 +340,21 @@ async function runTurn(
   console.log(
     `[runTurn] session=${session.sessionId.slice(0, 8)} task=${session.taskId.slice(0, 8)} profile=${profile.id} model=${ov.model ?? '(default)'} mode=${ov.permissionMode ?? 'default'} firstTurn=${opts.isFirstTurn} resume=${session.claudeSessionId ?? 'none'} allowedTools=${allowedTools.length} prompt="${opts.prompt.slice(0, 80)}"`,
   );
-  // MCP サーバは credentials.json の mcpOAuth から CLI が自動検出する。
-  // ホスト上で認証済みの Slack/Notion 等がそのまま使える。
+  // 使いたい MCP サーバだけ明示的に指定。
+  // --strict-mcp-config で claude.ai の自動検出 (Atlassian/Gmail 等) を無効化。
+  // OAuth 設定は plugin と同一フォーマットにして credentials.json のトークンを参照させる。
+  const mcpConfig = {
+    mcpServers: {
+      slack: {
+        type: 'http',
+        url: 'https://mcp.slack.com/mcp',
+        oauth: {
+          clientId: '1601185624273.8899143856786',
+          callbackPort: 3118,
+        },
+      },
+    },
+  };
 
   const exec = await session.sandbox.execClaude({
     prompt: opts.prompt,
@@ -352,6 +365,7 @@ async function runTurn(
     timeLimitSeconds: profile.timeLimitSeconds,
     model: ov.model,
     permissionMode: ov.permissionMode,
+    mcpConfig,
   });
   session.claudeExec = exec;
   console.log(`[runTurn] exec started id=${exec.execId} session=${session.sessionId.slice(0, 8)}`);
