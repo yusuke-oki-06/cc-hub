@@ -253,18 +253,13 @@ export default function TaskView() {
   const sendPrompt = async (payload: ComposerSubmit) => {
     if (!sessionId) return;
     try {
-      if (hasTerminal) {
-        // xterm.js モード: CLI は対話モードで動いているので stdin に直接送信
-        await api(`/api/sessions/${sessionId}/stdin`, {
-          method: 'POST',
-          body: JSON.stringify({ text: payload.text }),
-        });
-      } else {
-        await api(`/api/sessions/${sessionId}/claude/prompt`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-      }
+      // -p mode + Tty: true の場合も各 turn は独立した exec なので
+      // 従来の /claude/prompt (runTurn) を使う。terminal.data イベントが
+      // 新しい turn 分も追記される。
+      await api(`/api/sessions/${sessionId}/claude/prompt`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
     } catch (err) {
       const msg = (err as Error).message ?? '';
       if (msg.includes('session not active') || msg.startsWith('404')) {
@@ -278,10 +273,7 @@ export default function TaskView() {
   const sendShortcut = async (text: string) => {
     if (!sessionId) return;
     try {
-      const endpoint = hasTerminal
-        ? `/api/sessions/${sessionId}/stdin`
-        : `/api/sessions/${sessionId}/claude/prompt`;
-      await api(endpoint, {
+      await api(`/api/sessions/${sessionId}/claude/prompt`, {
         method: 'POST',
         body: JSON.stringify({ text }),
       });

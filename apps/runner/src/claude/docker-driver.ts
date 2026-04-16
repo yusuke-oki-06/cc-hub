@@ -162,9 +162,13 @@ async function startClaudeExec(
   // 対話モード (--print なし) で起動し、stdin 経由で prompt を送信する。
   // これにより CLI の完全な TUI (スパークル、色分け、タスクリスト等) が
   // ANSI エスケープとして出力される。
-  // --settings フラグは外す — createSandbox の init exec で設定が完了済み。
-  // --settings を渡すとオンボーディングが再発する場合がある。
+  // -p (print mode) + Tty: true の組み合わせ:
+  //   - -p でオンボーディングを確実にスキップ
+  //   - Tty: true で ANSI カラー / フォーマット付き出力を得る
+  //   - 各 turn は独立した exec (既存の runTurn モデル維持)
   const args: string[] = [
+    '-p',
+    input.prompt,
     `--max-turns=${input.maxTurns}`,
   ];
   if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
@@ -192,14 +196,7 @@ async function startClaudeExec(
 
   const duplex = (await exec.start({ hijack: true, stdin: true, Tty: true })) as NodeJS.ReadWriteStream;
 
-  const writeIfOpen = (text: string) => {
-    if ((duplex as unknown as { writable?: boolean }).writable !== false) {
-      duplex.write(text);
-    }
-  };
-  // CLI がプロンプト入力待ちになる頃にプロンプトを送信。
-  // --settings フラグでテーマを事前設定しているのでオンボーディングは出ない想定。
-  setTimeout(() => writeIfOpen(input.prompt + '\n'), 2000);
+  // -p mode では prompt は CLI 引数で渡済み。stdin 送信は不要。
 
   // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
   // 全出力をそのまま terminal.data イベントとして転送する。
