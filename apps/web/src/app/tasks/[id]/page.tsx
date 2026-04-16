@@ -15,6 +15,7 @@ import type { SseEvent } from '@cc-hub/shared';
 interface Task {
   id: string;
   prompt: string;
+  label: string | null;
   status: string;
   profileId: string;
   costUsd: number;
@@ -304,15 +305,17 @@ export default function TaskView() {
         <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">
             {task && <Badge tone={statusTone(task.status)}>{statusLabel(task.status)}</Badge>}
-            <span className="font-sans text-[12px] text-stone">
-              {connected ? 'ライブ中' : '接続待ち'}
-            </span>
+            {isRunning && (
+              <span className="font-sans text-[12px] text-stone">
+                {connected ? 'ライブ中' : '接続待ち…'}
+              </span>
+            )}
             <span className="font-mono text-[11px] text-stone">
               · session {sessionId?.slice(0, 8) ?? '…'}
             </span>
           </div>
           <h1 className="font-serif text-[26px] leading-[1.2] text-near line-clamp-2">
-            {task?.prompt ?? '…'}
+            {task?.label ?? task?.prompt ?? '…'}
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -493,7 +496,7 @@ export default function TaskView() {
               variant="followup"
               disabled={!sessionId || isRunning}
               onSubmit={sendPrompt}
-              taskName={task?.prompt ? (task.prompt.replace(/\n.*/s, '').slice(0, 40) || undefined) : undefined}
+              taskName={task?.label ?? task?.prompt?.replace(/\n.*/s, '').slice(0, 40) ?? undefined}
               extraActions={
                 <>
                   <ShortcutButton

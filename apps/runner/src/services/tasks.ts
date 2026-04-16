@@ -77,6 +77,7 @@ export async function getTask(taskId: string, userId: string): Promise<TaskRow |
       user_id::text   AS "userId",
       profile_id      AS "profileId",
       prompt,
+      label,
       status,
       cost_usd::float AS "costUsd",
       created_at::text AS "createdAt",
