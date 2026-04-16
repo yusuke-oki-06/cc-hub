@@ -86,7 +86,6 @@ export async function createSandbox(input: CreateSandboxInput): Promise<SandboxH
     AttachStdout: false,
     AttachStderr: false,
     Cmd: ['sleep', 'infinity'],
-    ExposedPorts: { '3118/tcp': {} },
     HostConfig: {
       AutoRemove: false,
       Binds: binds,
@@ -100,9 +99,6 @@ export async function createSandbox(input: CreateSandboxInput): Promise<SandboxH
       ReadonlyRootfs: false,
       Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=256m' },
       ExtraHosts: ['host.docker.internal:host-gateway'],
-      // MCP OAuth コールバック (Slack 等) がブラウザから到達できるよう
-      // ポート 3118 をホストに公開。
-      PortBindings: { '3118/tcp': [{ HostPort: '3118' }] },
     },
   });
 
@@ -166,10 +162,11 @@ async function startClaudeExec(
   // MCP サーバ設定 — credentials.json に OAuth が入っている MCP サーバを
   // CLI に認識させる。Slack / Notion 等はホスト上で一度 OAuth 完了していれば
   // そのまま使える。
+  // MCP サーバは credentials.json の mcpOAuth から自動検出させる。
+  // ホスト上で認証済みの Slack 等がそのまま使える。
+  // 追加の MCP サーバがあれば --mcp-config で足す。
   if (input.mcpConfig) {
-    // --strict-mcp-config: credentials.json から自動検出される claude.ai の
-    // MCP サーバ (Atlassian/Gmail/Notion 等) を無視し、明示的に渡したもののみ使う。
-    args.push('--strict-mcp-config', '--mcp-config', JSON.stringify(input.mcpConfig));
+    args.push('--mcp-config', JSON.stringify(input.mcpConfig));
   }
 
   const exec = await container.exec({
