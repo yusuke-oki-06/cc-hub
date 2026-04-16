@@ -341,7 +341,10 @@ async function runTurn(
   // 将来は profile.mcpServers から動的に読む。
   const mcpConfig = {
     mcpServers: {
-      slack: { url: 'https://mcp.slack.com/mcp' },
+      slack: {
+        type: 'http',
+        url: 'https://mcp.slack.com/mcp',
+      },
     },
   };
 
