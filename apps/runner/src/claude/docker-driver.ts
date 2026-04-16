@@ -137,10 +137,10 @@ async function startClaudeExec(
   // 注意: `--input-format=stream-json` を指定すると Claude は stdin から JSON メッセージを待つ。
   // Phase 1 は初回プロンプトを `-p <prompt>` で渡し、追加メッセージは別 exec で流す方式に
   // する (send() は互換のため残すが stdin 経由での追送信は本節では未使用)。
-  const args = [
-    '-p',
-    input.prompt,
-    '--verbose',
+  // 対話モード (--print なし) で起動し、stdin 経由で prompt を送信する。
+  // これにより CLI の完全な TUI (スパークル、色分け、タスクリスト等) が
+  // ANSI エスケープとして出力される。
+  const args: string[] = [
     `--max-turns=${input.maxTurns}`,
   ];
   if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
@@ -166,6 +166,14 @@ async function startClaudeExec(
   });
 
   const duplex = (await exec.start({ hijack: true, stdin: true, Tty: true })) as NodeJS.ReadWriteStream;
+
+  // 対話モードで起動した CLI の stdin にプロンプトを送信。
+  // CLI が入力待ちになるまで少し待ってから書き込む。
+  setTimeout(() => {
+    if ((duplex as unknown as { writable?: boolean }).writable !== false) {
+      duplex.write(input.prompt + '\n');
+    }
+  }, 1500);
 
   // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
   // 全出力をそのまま terminal.data イベントとして転送する。
