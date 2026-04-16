@@ -300,9 +300,6 @@ export default function TaskView() {
 
   return (
     <div className="mx-auto max-w-[1280px] px-8 py-10 space-y-5">
-      <Link href="/" className="font-sans text-[13px] text-stone hover:text-olive">
-        ← ダッシュボード
-      </Link>
       <header className="flex items-start justify-between gap-6 border-b border-border-warm pb-5">
         <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">

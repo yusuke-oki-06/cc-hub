@@ -118,10 +118,7 @@ export default function Workspace() {
     <div className="mx-auto max-w-[1400px] px-8 py-10 space-y-6">
       {/* Header */}
       <header>
-        <Link href="/" className="font-sans text-[12px] text-stone hover:text-olive">
-          ← ダッシュボード
-        </Link>
-        <h1 className="mt-1 font-serif text-[28px] leading-[1.1] text-near">Workspace</h1>
+        <h1 className="font-serif text-[28px] leading-[1.1] text-near">Workspace</h1>
       </header>
 
       {/* Active sessions — monitor focuses on live sessions only */}

@@ -181,7 +181,7 @@ export function Sidebar() {
         </Section>
 
         {/* Projects */}
-        <Section title="プロジェクト" actionHref="/projects" actionLabel="すべて">
+        <Section title="プロジェクト">
           <ul className="space-y-0.5">
             {projects.slice(0, 6).map((p) => (
               <li key={p.id}>
@@ -204,7 +204,7 @@ export function Sidebar() {
         </Section>
 
         {/* Recent tasks */}
-        <Section title="最近のセッション" actionHref="/workspace" actionLabel="開く">
+        <Section title="最近のセッション">
           <ul className="space-y-0.5">
             {tasks.map((t) => (
               <SessionRow
