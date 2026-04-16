@@ -34,12 +34,9 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
     case 'assistant.message': {
       const inner = (payload as { type?: string; message?: Record<string, unknown> }).type;
       if (inner === 'rate_limit_event') {
-        const info = (payload as { rate_limit_info?: { status?: string } }).rate_limit_info;
-        const status = info?.status ?? 'unknown';
-        if (status === 'allowed') {
-          return { seq: ev.seq, kind: 'hidden', title: 'rate_limit.ok' };
-        }
-        return { seq: ev.seq, kind: 'system', title: `rate_limit: ${status}`, meta: time };
+        // Anthropic 内部の rate-limit ステータスはユーザーに意味が薄いので
+        // allowed / それ以外問わず UI には出さない。
+        return { seq: ev.seq, kind: 'hidden', title: 'rate_limit' };
       }
       if (inner === 'stream_event') {
         return { seq: ev.seq, kind: 'hidden', title: 'stream_event' };

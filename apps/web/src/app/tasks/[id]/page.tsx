@@ -38,14 +38,6 @@ export default function TaskView() {
   const [atBottom, setAtBottom] = useState(true);
   const sessionId = task?.sessionId ?? null;
   const timeline = useMemo(() => buildTimeline(events), [events]);
-  const traceUrl = useMemo(() => {
-    // pick the most recent langfuseTraceUrl from any event payload
-    for (let i = events.length - 1; i >= 0; i--) {
-      const p = events[i]?.payload as { langfuseTraceUrl?: string } | null;
-      if (p?.langfuseTraceUrl) return p.langfuseTraceUrl;
-    }
-    return null;
-  }, [events]);
   const saasLinks = useMemo(
     () => events.filter((e) => e.type === 'saas_link'),
     [events],
@@ -437,49 +429,15 @@ export default function TaskView() {
           />
         </section>
 
-        {/* Right rail: meta / permissions / SaaS */}
-        <aside className="space-y-4">
-          {permissionOpen.length > 0 && (
-            <PermissionQueue events={permissionOpen} sessionId={sessionId} />
-          )}
-          {saasLinks.length > 0 && <SaasPanel events={saasLinks} />}
-          <Card>
-            <CardHeader>
-              <CardTitle>メタ情報</CardTitle>
-            </CardHeader>
-            <dl className="space-y-2 font-sans text-[13px]">
-              <div className="flex justify-between">
-                <dt className="text-stone">profile</dt>
-                <dd className="font-mono text-near">{task?.profileId ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-stone">cost</dt>
-                <dd className="text-near">${task?.costUsd?.toFixed(3) ?? '0.000'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-stone">作成</dt>
-                <dd className="text-near">
-                  {task ? new Date(task.createdAt).toLocaleString('ja-JP') : '—'}
-                </dd>
-              </div>
-              {traceUrl && (
-                <div className="pt-2 border-t border-border-cream">
-                  <a
-                    href={traceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 font-sans text-[12px] text-terracotta hover:underline"
-                  >
-                    詳細トレースを見る (Langfuse) ↗
-                  </a>
-                  <p className="mt-1 font-sans text-[10px] leading-[1.5] text-stone">
-                    Langfuse は Claude の動きを記録した詳細ログです。管理者向け。
-                  </p>
-                </div>
-              )}
-            </dl>
-          </Card>
-        </aside>
+        {/* Right rail: 権限待ち / SaaS リンクだけ。メタ情報カードは不要と判断 */}
+        {(permissionOpen.length > 0 || saasLinks.length > 0) && (
+          <aside className="space-y-4">
+            {permissionOpen.length > 0 && (
+              <PermissionQueue events={permissionOpen} sessionId={sessionId} />
+            )}
+            {saasLinks.length > 0 && <SaasPanel events={saasLinks} />}
+          </aside>
+        )}
       </div>
     </div>
   );
