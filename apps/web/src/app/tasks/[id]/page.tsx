@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { subscribeSession } from '@/lib/sse';
 import { buildTimeline, type FriendlyItem } from '@/lib/render/friendly';
 import { PromptComposer, type ComposerSubmit } from '@/components/prompt-composer';
+import { TerminalView } from '@/components/terminal-view';
 import { ChatMessage, ChatThinking } from '@/components/chat-message';
 import type { SseEvent } from '@cc-hub/shared';
 
@@ -54,6 +55,11 @@ export default function TaskView() {
   const [atBottom, setAtBottom] = useState(true);
   const sessionId = task?.sessionId ?? null;
   const timeline = useMemo(() => buildTimeline(events), [events]);
+  // terminal.data イベントが 1 件でもあれば xterm.js ベースの表示にする
+  const hasTerminal = useMemo(
+    () => events.some((e) => e.type === 'terminal.data'),
+    [events],
+  );
 
   // AskUserQuestion モーダル — 未回答のものがあればボトムシート風に描画する。
   // 「回答済み」判定は「最後の turn.started (= user メッセージ) の seq が
@@ -401,43 +407,45 @@ export default function TaskView() {
           className="relative mx-auto grid w-full max-w-[760px] grid-rows-[1fr_auto] gap-4"
           style={{ height: 'calc(100svh - 240px)', minHeight: 420 }}
         >
-          <div
-            ref={listRef}
-            onScroll={onTimelineScroll}
-            className="relative min-h-0 overflow-y-auto pr-2"
-          >
-            <div className="space-y-4 py-2">
-              {timeline.map((it) => (
-                <ChatMessage
-                  key={it.seq}
-                  item={it}
-                  renderInline={(i) => (
-                    <PermissionInlineCard item={i} sessionId={sessionId} />
-                  )}
-                />
-              ))}
-              {isRunning && showThinking(timeline) && (
-                <ChatThinking onStop={sessionId ? onAbort : undefined} />
-              )}
-              {timeline.length === 0 && !isRunning && !sessionId && (
-                <div className="py-10 text-center font-sans text-[13px] text-stone">
-                  セッションを準備中…
-                </div>
-              )}
-            </div>
+          {hasTerminal ? (
+            /* xterm.js ベースのターミナル表示 — CLI 出力をそのまま描画 */
+            <TerminalView events={events} className="min-h-0 overflow-hidden rounded-card" />
+          ) : (
+            /* 従来の ChatMessage 列 (stream-json 由来のセッション用) */
+            <div
+              ref={listRef}
+              onScroll={onTimelineScroll}
+              className="relative min-h-0 overflow-y-auto pr-2"
+            >
+              <div className="space-y-4 py-2">
+                {timeline.map((it) => (
+                  <ChatMessage
+                    key={it.seq}
+                    item={it}
+                    renderInline={(i) => (
+                      <PermissionInlineCard item={i} sessionId={sessionId} />
+                    )}
+                  />
+                ))}
+                {isRunning && showThinking(timeline) && (
+                  <ChatThinking onStop={sessionId ? onAbort : undefined} />
+                )}
+                {timeline.length === 0 && !isRunning && !sessionId && (
+                  <div className="py-10 text-center font-sans text-[13px] text-stone">
+                    セッションを準備中…
+                  </div>
+                )}
+              </div>
 
-            {/* Jump-to-bottom 丸ボタン — 追加クエリ入力欄の上に、ボタン縦幅
-                1 個分の隙間で浮かせる。スクロール領域内に sticky で置くこと
-                で常に viewport 下部の固定位置に表示される。 */}
-            {!atBottom && timeline.length > 0 && (
-              <div className="pointer-events-none sticky bottom-2 z-10 flex w-full justify-center">
-                <button
-                  type="button"
-                  onClick={scrollToBottom}
-                  aria-label="最新へ移動"
-                  title="最新へ移動"
-                  className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-warm bg-white text-charcoal shadow-[0_6px_16px_rgba(0,0,0,0.12)] transition hover:bg-sand"
-                >
+              {!atBottom && timeline.length > 0 && (
+                <div className="pointer-events-none sticky bottom-2 z-10 flex w-full justify-center">
+                  <button
+                    type="button"
+                    onClick={scrollToBottom}
+                    aria-label="最新へ移動"
+                    title="最新へ移動"
+                    className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-warm bg-white text-charcoal shadow-[0_6px_16px_rgba(0,0,0,0.12)] transition hover:bg-sand"
+                  >
                   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                     <path d="M8 3v9M4 9l4 4 4-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -445,6 +453,7 @@ export default function TaskView() {
               </div>
             )}
           </div>
+          )}
 
           {/* チャット入力エリア:
               AskUserQuestion が来ているときはモーダルに置き換え、

@@ -569,6 +569,18 @@ app.post('/api/sessions/:id/claude/prompt', async (c) => {
   }
 });
 
+// ---------- Terminal stdin (xterm.js → CLI) ----------
+app.post('/api/sessions/:id/stdin', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = getActiveSession(sessionId);
+  if (!session) return c.json({ error: 'session not active' }, 404);
+  if (session.userId !== c.get('userId')) return c.json({ error: 'forbidden' }, 403);
+  const { text } = await c.req.json<{ text: string }>();
+  if (typeof text !== 'string') return c.json({ error: 'text is required' }, 400);
+  session.claudeExec?.writeStdin?.(text);
+  return c.json({ ok: true });
+});
+
 // ---------- Permission resolution (HITL approval) ----------
 const ResolvePermissionSchema = z.object({
   requestId: z.string().uuid(),
@@ -1021,6 +1033,7 @@ function mapClaudeEventType(t: string): never {
     ['runner.error', 'error'],
     ['runner.aborted', 'error'],
     ['runner.parse_error', 'error'],
+    ['terminal.data', 'terminal.data'],
   ]);
   return (known.get(t) ?? 'assistant.message') as never;
 }

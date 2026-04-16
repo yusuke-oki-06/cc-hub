@@ -18,6 +18,7 @@ export const SseEventTypeSchema = z.enum([
   'saas_link',
   'turn.started',
   'turn.ended',
+  'terminal.data',
 ]);
 export type SseEventType = z.infer<typeof SseEventTypeSchema>;
 

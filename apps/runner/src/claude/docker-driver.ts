@@ -1,7 +1,5 @@
 import Docker from 'dockerode';
-import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
-import { StreamJsonParser } from './stream-parser.js';
 import type { ClaudeStreamEvent, ClaudeStdinMessage } from '@cc-hub/shared';
 
 const docker = new Docker();
@@ -46,6 +44,8 @@ export interface ClaudeExecHandle {
   execId: string;
   abort(reason?: string): Promise<void>;
   send(msg: ClaudeStdinMessage): void;
+  /** PTY stdin に raw テキストを送信 (ターミナル入力) */
+  writeStdin?(text: string): void;
   onEvent(cb: (ev: ClaudeStreamEvent) => void): void;
   onExit(cb: (code: number | null) => void): void;
   onError(cb: (err: Error) => void): void;
@@ -140,9 +140,7 @@ async function startClaudeExec(
   const args = [
     '-p',
     input.prompt,
-    '--output-format=stream-json',
     '--verbose',
-    '--include-partial-messages',
     `--max-turns=${input.maxTurns}`,
   ];
   if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
@@ -154,35 +152,30 @@ async function startClaudeExec(
     args.push('--permission-mode', input.permissionMode);
   }
 
+  // Tty: true にすることで CLI に「ターミナルに繋がっている」と認識させ、
+  // スパークルアニメ・色分け・タスクリストなど CLI 本来の描画を ANSI エスケ
+  // ープとして出力させる。stream-json ではなく生の ANSI 出力を転送し、
+  // Web 側で xterm.js に feed する。
   const exec = await container.exec({
     Cmd: ['claude', ...args],
-    AttachStdin: false,
+    AttachStdin: true,
     AttachStdout: true,
     AttachStderr: true,
-    Tty: false,
+    Tty: true,
     WorkingDir: '/workspace',
   });
 
-  const duplex = (await exec.start({ hijack: true, stdin: false })) as NodeJS.ReadWriteStream;
+  const duplex = (await exec.start({ hijack: true, stdin: true, Tty: true })) as NodeJS.ReadWriteStream;
 
-  const stdout = new PassThrough();
-  const stderr = new PassThrough();
-  container.modem.demuxStream(duplex, stdout, stderr);
-
-  const parser = new StreamJsonParser();
+  // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
+  // 全出力をそのまま terminal.data イベントとして転送する。
   const eventListeners = new Set<(ev: ClaudeStreamEvent) => void>();
   const exitListeners = new Set<(code: number | null) => void>();
   const errorListeners = new Set<(err: Error) => void>();
 
-  stdout.setEncoding('utf8');
-  stdout.on('data', (chunk: string) => {
-    for (const ev of parser.push(chunk)) for (const cb of eventListeners) cb(ev);
-  });
-
-  stderr.setEncoding('utf8');
-  stderr.on('data', (chunk: string) => {
-    // Publish full stderr; publishEvent layer applies SSE_EVENT_MAX_BYTES cap
-    for (const cb of eventListeners) cb({ type: 'runner.stderr', text: chunk });
+  duplex.on('data', (chunk: Buffer) => {
+    const b64 = chunk.toString('base64');
+    for (const cb of eventListeners) cb({ type: 'terminal.data', data: b64 });
   });
 
   duplex.on('error', (err) => {
@@ -204,7 +197,7 @@ async function startClaudeExec(
     exited = true;
     if (watchdog) clearTimeout(watchdog);
     if (timeLimit) clearTimeout(timeLimit);
-    for (const ev of parser.flush()) for (const cb of eventListeners) cb(ev);
+    // Tty モードでは stream-json パーサーを使わないため flush 不要
     let code: number | null = null;
     try {
       const info = await exec.inspect();
@@ -267,6 +260,12 @@ async function startClaudeExec(
     send: (msg) => {
       if ((duplex as unknown as { writable?: boolean }).writable !== false) {
         duplex.write(JSON.stringify(msg) + '\n');
+      }
+    },
+    /** PTY stdin に raw テキストを送信 (ユーザーのキーボード入力など)。 */
+    writeStdin: (text: string) => {
+      if ((duplex as unknown as { writable?: boolean }).writable !== false) {
+        duplex.write(text);
       }
     },
     onEvent: (cb) => {
