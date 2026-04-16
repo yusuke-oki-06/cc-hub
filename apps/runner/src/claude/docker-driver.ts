@@ -160,6 +160,7 @@ async function startClaudeExec(
   // ANSI エスケープとして出力される。
   const args: string[] = [
     `--max-turns=${input.maxTurns}`,
+    '--settings', JSON.stringify({ theme: 'dark', preferredNotifChannel: 'terminal' }),
   ];
   if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
   if (input.disallowedTools.length > 0)
@@ -185,18 +186,14 @@ async function startClaudeExec(
 
   const duplex = (await exec.start({ hijack: true, stdin: true, Tty: true })) as NodeJS.ReadWriteStream;
 
-  // 対話モードで起動した CLI はオンボーディング画面 (テーマ選択) が出ること
-  // がある。Enter を送って既定テーマを選択し抜ける。その後プロンプトを送信。
   const writeIfOpen = (text: string) => {
     if ((duplex as unknown as { writable?: boolean }).writable !== false) {
       duplex.write(text);
     }
   };
-  // Step 1: オンボーディング通過 (Enter × 2 で既定値を承認)
-  setTimeout(() => writeIfOpen('\n'), 800);
-  setTimeout(() => writeIfOpen('\n'), 1200);
-  // Step 2: プロンプト送信 (CLI がプロンプト入力待ちになる頃)
-  setTimeout(() => writeIfOpen(input.prompt + '\n'), 3000);
+  // CLI がプロンプト入力待ちになる頃にプロンプトを送信。
+  // --settings フラグでテーマを事前設定しているのでオンボーディングは出ない想定。
+  setTimeout(() => writeIfOpen(input.prompt + '\n'), 2000);
 
   // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
   // 全出力をそのまま terminal.data イベントとして転送する。
