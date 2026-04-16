@@ -6,7 +6,7 @@
 
 ## Context
 
-Claude Code を社内配布する際、バックエンドで Claude Code を駆動する「Runner」の選択肢は主に2つ:
+Claude Code を展開する際、バックエンドで Claude Code を駆動する「Runner」の選択肢は主に2つ:
 
 1. **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) — Anthropic 公式、TypeScript/Python
 2. **ericvtheg/claude-code-runner** — OSS の self-host runner (HTML ダッシュボード + Docker)
