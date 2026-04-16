@@ -205,24 +205,43 @@ async function startClaudeExec(
     }
   };
 
+  // オンボーディングは複数ステップ (テーマ選択 → 課金情報 → ...) あるため、
+  // 出力を監視して Enter を繰り返し送信し、CLI のプロンプト入力待ちを検出
+  // したらユーザーのプロンプトを送信する。
+  let enterCount = 0;
+  const MAX_AUTO_ENTERS = 8;
+
   const handleAutoInput = (chunk: Buffer) => {
     outputBuffer += chunk.toString('utf8');
 
-    // Step 1: オンボーディング画面を検出して Enter で抜ける
-    if (!onboardingHandled && outputBuffer.includes('Choose the text style')) {
-      onboardingHandled = true;
-      // 少し待ってから Enter を送信 (画面描画完了を待つ)
-      setTimeout(() => writeIfOpen('\r'), 500);
+    if (promptSent) return;
+
+    // プロンプト入力待ちの検出: "❯" や ">" + 空行パターン、または
+    // 長い出力停止後に入力可能状態になったことを示すシグナル
+    const lastChunk = chunk.toString('utf8');
+    // CLI のプロンプト待ちは通常カーソル表示 ESC[?25h で終わる
+    // オンボーディング通過後は /workspace パスや ❯ マーカーが出る
+    if (outputBuffer.includes('/workspace') && !outputBuffer.includes('Choose the text style')) {
+      // オンボーディングなしでプロンプト待ちに到達した
+      promptSent = true;
+      setTimeout(() => writeIfOpen(input.prompt + '\r'), 300);
       return;
     }
 
-    // Step 2: オンボーディング後のプロンプト入力待ちを検出して prompt を送信
-    // Claude CLI は ">" プロンプトまたは入力待ち状態になる
-    if (onboardingHandled && !promptSent) {
-      // Syntax theme 選択画面も通過
-      if (outputBuffer.includes('Syntax theme:') || outputBuffer.includes('/workspace')) {
-        promptSent = true;
-        setTimeout(() => writeIfOpen(input.prompt + '\r'), 500);
+    // オンボーディング画面検出 → Enter で次へ
+    if (enterCount < MAX_AUTO_ENTERS) {
+      const onboardingPatterns = [
+        'Choose the text style',
+        'can be used with your Claude subscription',
+        'billed based on API',
+        'Let\'s get started',
+        'press Enter',
+      ];
+      for (const p of onboardingPatterns) {
+        if (outputBuffer.includes(p) && enterCount < MAX_AUTO_ENTERS) {
+          enterCount++;
+          setTimeout(() => writeIfOpen('\r'), 300 * enterCount);
+        }
       }
     }
   };
@@ -231,16 +250,13 @@ async function startClaudeExec(
     handleAutoInput(chunk);
   });
 
-  // フォールバック: 5 秒後にまだプロンプト未送信なら強制送信
+  // フォールバック: 8 秒後にまだプロンプト未送信なら強制送信
   setTimeout(() => {
     if (!promptSent) {
       promptSent = true;
-      if (!onboardingHandled) {
-        // オンボーディングが出てない場合は即プロンプト
-        writeIfOpen(input.prompt + '\r');
-      }
+      writeIfOpen(input.prompt + '\r');
     }
-  }, 5000);
+  }, 8000);
 
   // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
   // 全出力をそのまま terminal.data イベントとして転送する。
