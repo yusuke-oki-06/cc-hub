@@ -162,9 +162,10 @@ async function startClaudeExec(
   // 対話モード (--print なし) で起動し、stdin 経由で prompt を送信する。
   // これにより CLI の完全な TUI (スパークル、色分け、タスクリスト等) が
   // ANSI エスケープとして出力される。
+  // --settings フラグは外す — createSandbox の init exec で設定が完了済み。
+  // --settings を渡すとオンボーディングが再発する場合がある。
   const args: string[] = [
     `--max-turns=${input.maxTurns}`,
-    '--settings', JSON.stringify({ theme: 'dark', preferredNotifChannel: 'terminal' }),
   ];
   if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
   if (input.disallowedTools.length > 0)
