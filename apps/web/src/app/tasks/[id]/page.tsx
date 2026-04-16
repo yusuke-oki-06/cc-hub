@@ -32,9 +32,7 @@ interface QuestionSpec {
 interface ActiveQuestion {
   toolUseId: string;
   seq: number;
-  question: string;
-  options: Array<{ label: string; description?: string }>;
-  multiSelect: boolean;
+  questions: QuestionSpec[];
 }
 
 export default function TaskView() {
@@ -81,14 +79,12 @@ export default function TaskView() {
       const content = payload.message?.content ?? [];
       for (const c of content) {
         if (c?.type === 'tool_use' && c?.name === 'AskUserQuestion') {
-          const q = c.input?.questions?.[0];
-          if (!q) continue;
+          const qs = c.input?.questions;
+          if (!qs || qs.length === 0) continue;
           latest = {
             toolUseId: c.id ?? '',
             seq: ev.seq,
-            question: q.question,
-            options: q.options ?? [],
-            multiSelect: !!q.multiSelect,
+            questions: qs,
           };
         }
       }
@@ -445,53 +441,56 @@ export default function TaskView() {
             )}
           </div>
 
-          {/* Active AskUserQuestion — ボトムシート風にモーダル表示。選択する
-              と Q/A 形式で user メッセージを送信し、次ターンで Claude が続き
-              を判断する。 */}
-          {activeQuestion && (
+          {/* チャット入力エリア:
+              AskUserQuestion が来ているときはモーダルに置き換え、
+              そうでなければ通常の PromptComposer を表示する。 */}
+          {activeQuestion ? (
             <QuestionModal
-              question={activeQuestion}
-              onSelect={(answer) => {
-                const text = `Q: ${activeQuestion.question}\nA: ${answer}`;
-                void sendPrompt({ text });
+              questions={activeQuestion.questions}
+              onComplete={(answers) => {
+                const lines = answers.map(
+                  (a, i) => `Q: ${activeQuestion.questions[i]?.question ?? ''}\nA: ${a}`,
+                );
+                void sendPrompt({ text: lines.join('\n\n') });
               }}
               onSkip={() => {
-                const text = `Q: ${activeQuestion.question}\nA: (スキップ)`;
-                void sendPrompt({ text });
+                const lines = activeQuestion.questions.map(
+                  (q) => `Q: ${q.question}\nA: (スキップ)`,
+                );
+                void sendPrompt({ text: lines.join('\n\n') });
               }}
             />
+          ) : (
+            <PromptComposer
+              variant="followup"
+              disabled={!sessionId || isRunning}
+              onSubmit={sendPrompt}
+              extraActions={
+                <>
+                  <ShortcutButton
+                    label="履歴を整理"
+                    title="/compact を送信して会話履歴を圧縮"
+                    onClick={() =>
+                      sendShortcut(
+                        '/compact 会話履歴を圧縮してください (要点を保持、冗長な確認は削除)',
+                      )
+                    }
+                    disabled={!sessionId || isRunning}
+                  />
+                  <ShortcutButton
+                    label="CLAUDE.md を生成"
+                    title="このワークスペースに CLAUDE.md を作る"
+                    onClick={() =>
+                      sendShortcut(
+                        'ワークスペース (/workspace) の内容を分析し、この作業環境で Claude が守るべき指針を CLAUDE.md として生成してください。',
+                      )
+                    }
+                    disabled={!sessionId || isRunning}
+                  />
+                </>
+              }
+            />
           )}
-
-          {/* Composer (bottom-fixed within section via grid-rows auto) */}
-          <PromptComposer
-            variant="followup"
-            disabled={!sessionId || isRunning}
-            onSubmit={sendPrompt}
-            extraActions={
-              <>
-                <ShortcutButton
-                  label="履歴を整理"
-                  title="/compact を送信して会話履歴を圧縮"
-                  onClick={() =>
-                    sendShortcut(
-                      '/compact 会話履歴を圧縮してください (要点を保持、冗長な確認は削除)',
-                    )
-                  }
-                  disabled={!sessionId || isRunning}
-                />
-                <ShortcutButton
-                  label="CLAUDE.md を生成"
-                  title="このワークスペースに CLAUDE.md を作る"
-                  onClick={() =>
-                    sendShortcut(
-                      'ワークスペース (/workspace) の内容を分析し、この作業環境で Claude が守るべき指針を CLAUDE.md として生成してください。',
-                    )
-                  }
-                  disabled={!sessionId || isRunning}
-                />
-              </>
-            }
-          />
         </section>
 
         {/* Right rail: 権限待ち / SaaS リンクだけ。メタ情報カードは不要と判断 */}
@@ -544,25 +543,56 @@ function ShortcutButton({
 }
 
 
-/** claude.ai 風のボトムシート。Composer 直上に浮かべて、
- *  ↑↓ で移動・Enter で選択・Esc でスキップのキーバインドを提供する。
- *  右下に自由入力欄 + スキップボタン。 */
+/** claude.ai 風のボトムシート。Composer を置き換えて表示される。
+ *  複数質問対応: 「N 件中 M 件目」ナビ + 1 問回答ごとに次へ遷移。
+ *  全問回答後に onComplete(answers[]) が発火。 */
 function QuestionModal({
-  question,
-  onSelect,
+  questions,
+  onComplete,
   onSkip,
 }: {
-  question: ActiveQuestion;
-  onSelect: (answer: string) => void;
+  questions: QuestionSpec[];
+  onComplete: (answers: string[]) => void;
   onSkip: () => void;
 }) {
+  const [idx, setIdx] = useState(0);
+  const [answers, setAnswers] = useState<string[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [freetext, setFreetext] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const q = questions[idx];
+  const total = questions.length;
+
+  const pickAnswer = (ans: string) => {
+    const next = [...answers, ans];
+    if (idx + 1 < total) {
+      setAnswers(next);
+      setIdx(idx + 1);
+      setHighlight(0);
+      setFreetext('');
+    } else {
+      onComplete(next);
+    }
+  };
+
+  const goPrev = () => {
+    if (idx > 0) {
+      setAnswers(answers.slice(0, -1));
+      setIdx(idx - 1);
+      setHighlight(0);
+      setFreetext('');
+    }
+  };
+  const goNext = () => {
+    if (idx + 1 < total && answers.length > idx) {
+      setIdx(idx + 1);
+      setHighlight(0);
+      setFreetext('');
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Text 入力欄にフォーカスがあるときは Enter/Escape だけ自力で処理させる
       if (document.activeElement === inputRef.current) {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -572,14 +602,14 @@ function QuestionModal({
       }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setHighlight((v) => Math.min(question.options.length - 1, v + 1));
+        setHighlight((v) => Math.min((q?.options?.length ?? 1) - 1, v + 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setHighlight((v) => Math.max(0, v - 1));
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        const o = question.options[highlight];
-        if (o) onSelect(o.label);
+        const o = q?.options?.[highlight];
+        if (o) pickAnswer(o.label);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onSkip();
@@ -587,86 +617,114 @@ function QuestionModal({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [highlight, question.options, onSelect, onSkip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlight, q, idx, answers]);
+
+  if (!q) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[148px] z-20 flex justify-center px-3">
-      <div className="pointer-events-auto w-full max-w-[640px] overflow-hidden rounded-[20px] border border-border-warm bg-ivory shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
-        <header className="flex items-center justify-between gap-3 border-b border-border-cream px-4 py-3">
-          <span className="truncate font-sans text-[14px] text-near">{question.question}</span>
+    <div className="w-full overflow-hidden rounded-[20px] border border-border-warm bg-ivory shadow-[0_8px_24px_rgba(0,0,0,0.15)]">
+      <header className="flex items-center justify-between gap-3 border-b border-border-cream px-4 py-3">
+        <span className="min-w-0 flex-1 truncate font-sans text-[14px] text-near">{q.question}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          {total > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={goPrev}
+                disabled={idx === 0}
+                className="rounded p-0.5 text-stone hover:bg-sand disabled:opacity-30"
+                aria-label="前の質問"
+              >
+                &lt;
+              </button>
+              <span className="font-mono text-[11px] text-stone">
+                {total}件中{idx + 1}件目
+              </span>
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={idx + 1 >= total || answers.length <= idx}
+                className="rounded p-0.5 text-stone hover:bg-sand disabled:opacity-30"
+                aria-label="次の質問"
+              >
+                &gt;
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={onSkip}
             aria-label="閉じる / スキップ"
-            className="shrink-0 rounded p-1 text-stone hover:bg-sand hover:text-charcoal"
+            className="ml-1 shrink-0 rounded p-1 text-stone hover:bg-sand hover:text-charcoal"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
               <path d="M2 2l10 10M12 2l-10 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
           </button>
-        </header>
-        <ul className="divide-y divide-border-cream">
-          {question.options.map((o, i) => (
-            <li key={i}>
-              <button
-                type="button"
-                onClick={() => onSelect(o.label)}
-                onMouseEnter={() => setHighlight(i)}
-                title={o.description}
-                className={
-                  'flex w-full items-center gap-3 px-4 py-2.5 text-left transition ' +
-                  (i === highlight ? 'bg-sand text-near' : 'text-charcoal hover:bg-sand/60')
-                }
-              >
-                <span
-                  className={
-                    'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[11px] ' +
-                    (i === highlight ? 'bg-terracotta text-ivory' : 'bg-border-cream text-stone')
-                  }
-                >
-                  {i + 1}
-                </span>
-                <span className="flex-1 font-sans text-[13.5px]">{o.label}</span>
-                {i === highlight && (
-                  <span className="shrink-0 font-mono text-[11px] text-stone">↵</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="border-t border-border-cream px-4 py-3">
-          <div className="flex items-center gap-2 rounded-card border border-border-cream bg-white px-3 py-1.5 focus-within:border-terracotta">
-            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" className="shrink-0 text-stone">
-              <path d="M2 13l3-3 8-8 3 3-8 8-3 3-3 0z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round" />
-            </svg>
-            <input
-              ref={inputRef}
-              type="text"
-              value={freetext}
-              onChange={(e) => setFreetext(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && freetext.trim()) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onSelect(freetext.trim());
-                }
-              }}
-              placeholder="その他 (自由入力)"
-              className="flex-1 bg-transparent font-sans text-[13px] text-near placeholder:text-stone focus:outline-none"
-            />
+        </div>
+      </header>
+      <ul className="divide-y divide-border-cream">
+        {(q.options ?? []).map((o, i) => (
+          <li key={i}>
             <button
               type="button"
-              onClick={onSkip}
-              className="shrink-0 rounded-card border border-border-cream bg-white px-2 py-0.5 font-sans text-[11px] text-charcoal hover:bg-sand"
+              onClick={() => pickAnswer(o.label)}
+              onMouseEnter={() => setHighlight(i)}
+              title={o.description}
+              className={
+                'flex w-full items-center gap-3 px-4 py-2.5 text-left transition ' +
+                (i === highlight ? 'bg-sand text-near' : 'text-charcoal hover:bg-sand/60')
+              }
             >
-              スキップ
+              <span
+                className={
+                  'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[11px] ' +
+                  (i === highlight ? 'bg-terracotta text-ivory' : 'bg-border-cream text-stone')
+                }
+              >
+                {i + 1}
+              </span>
+              <span className="flex-1 font-sans text-[13.5px]">{o.label}</span>
+              {i === highlight && (
+                <span className="shrink-0 font-mono text-[11px] text-stone">↵</span>
+              )}
             </button>
-          </div>
+          </li>
+        ))}
+      </ul>
+      <div className="border-t border-border-cream px-4 py-3">
+        <div className="flex items-center gap-2 rounded-card border border-border-cream bg-white px-3 py-1.5 focus-within:border-terracotta">
+          <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" className="shrink-0 text-stone">
+            <path d="M2 13l3-3 8-8 3 3-8 8-3 3-3 0z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round" />
+          </svg>
+          <input
+            ref={inputRef}
+            type="text"
+            value={freetext}
+            onChange={(e) => setFreetext(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && freetext.trim()) {
+                e.preventDefault();
+                e.stopPropagation();
+                pickAnswer(freetext.trim());
+              }
+            }}
+            placeholder="その他 (自由入力)"
+            className="flex-1 bg-transparent font-sans text-[13px] text-near placeholder:text-stone focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={onSkip}
+            className="shrink-0 rounded-card border border-border-cream bg-white px-2 py-0.5 font-sans text-[11px] text-charcoal hover:bg-sand"
+          >
+            スキップ
+          </button>
         </div>
-        <p className="bg-parchment/60 px-4 py-2 text-center font-sans text-[11px] text-stone">
-          ↑↓ で移動 · Enter で選択 · Esc でスキップ
-        </p>
       </div>
+      <p className="bg-parchment/60 px-4 py-2 text-center font-sans text-[11px] text-stone">
+        ↑↓ で移動 · Enter で選択 · Esc でスキップ
+      </p>
     </div>
   );
 }
