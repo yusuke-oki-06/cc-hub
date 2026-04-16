@@ -22,8 +22,8 @@ export const ClaudeModelIdSchema = z.enum(['opus', 'sonnet', 'haiku']);
  */
 export const GUI_PERMISSION_MODES = [
   { id: 'default', label: '通常', blurb: 'プロファイル設定通り' },
-  { id: 'plan', label: '計画のみ', blurb: '実装はせず調査と計画を返す' },
-  { id: 'acceptEdits', label: '編集自動承認', blurb: 'Edit/Write を自動許可 (tool は profile に従う)' },
+  { id: 'plan', label: 'プランモード', blurb: '実装はせず調査と計画を返す' },
+  { id: 'acceptEdits', label: '編集を承認', blurb: 'Edit/Write を自動許可 (tool は profile に従う)' },
 ] as const;
 
 export type GuiPermissionMode = (typeof GUI_PERMISSION_MODES)[number]['id'];
