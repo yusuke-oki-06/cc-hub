@@ -95,8 +95,13 @@ hooksApp.post('/pre-tool-use', async (c) => {
   if (!profile.allowedTools.includes(toolName) && toolName !== 'Unknown') {
     if (profile.disallowedTools.includes(toolName)) {
       blockReason = `tool "${toolName}" is in disallow list`;
-    } else if (!['Bash'].includes(toolName)) {
-      // allowedTools が非空で、この tool が入っていない場合は deny
+    } else if (
+      !['Bash', 'Skill'].includes(toolName) &&
+      !toolName.startsWith('mcp__')
+    ) {
+      // allowedTools が非空で、この tool が入っていない場合は deny。
+      // MCP ツール (mcp__*) は --mcp-config で管理者が制御済みのため自動許可。
+      // Skill は Claude Code 組み込みのため許可。
       if (profile.allowedTools.length > 0 && !profile.allowedTools.includes(toolName)) {
         blockReason = `tool "${toolName}" is not in allowed list`;
       }
