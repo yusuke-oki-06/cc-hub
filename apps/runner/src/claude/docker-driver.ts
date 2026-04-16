@@ -86,6 +86,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<SandboxH
     AttachStdout: false,
     AttachStderr: false,
     Cmd: ['sleep', 'infinity'],
+    ExposedPorts: { '3118/tcp': {} },
     HostConfig: {
       AutoRemove: false,
       Binds: binds,
@@ -99,6 +100,9 @@ export async function createSandbox(input: CreateSandboxInput): Promise<SandboxH
       ReadonlyRootfs: false,
       Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=256m' },
       ExtraHosts: ['host.docker.internal:host-gateway'],
+      // MCP OAuth コールバック (Slack 等) がブラウザから到達できるよう
+      // ポート 3118 をホストに公開。
+      PortBindings: { '3118/tcp': [{ HostPort: '3118' }] },
     },
   });
 
