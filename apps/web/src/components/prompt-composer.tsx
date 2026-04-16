@@ -119,12 +119,16 @@ export function PromptComposer({
             setSlash(detectSlashTrigger(v, caret, e.target));
           }}
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            // Enter (no modifier) で送信。Shift+Enter は改行として残す。
+            // ⌘/Ctrl+Enter も送信のキープ。IME 変換確定の Enter は isComposing で除外。
+            if (slash && e.key === 'Enter') {
               e.preventDefault();
-              void handleSend();
               return;
             }
-            if (slash && e.key === 'Enter') e.preventDefault();
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void handleSend();
+            }
           }}
           onBlur={() => {
             window.setTimeout(() => setSlash(null), 120);
