@@ -155,9 +155,9 @@ async function startClaudeExec(
     args.push('--disallowedTools', input.disallowedTools.join(' '));
   if (input.resumeSessionId) args.push('--resume', input.resumeSessionId);
   if (input.model) args.push('--model', input.model);
-  if (input.permissionMode && input.permissionMode !== 'default') {
-    args.push('--permission-mode', input.permissionMode);
-  }
+  // CLI の permission prompt を全スキップ。ツール制御は cc-hub の
+  // guardrail hooks (pre-tool-use) が担当するため二重チェックは不要。
+  args.push('--dangerously-skip-permissions');
 
   // MCP サーバ設定 — credentials.json に OAuth が入っている MCP サーバを
   // CLI に認識させる。Slack / Notion 等はホスト上で一度 OAuth 完了していれば
