@@ -162,11 +162,8 @@ async function startClaudeExec(
   // MCP サーバ設定 — credentials.json に OAuth が入っている MCP サーバを
   // CLI に認識させる。Slack / Notion 等はホスト上で一度 OAuth 完了していれば
   // そのまま使える。
-  // --strict-mcp-config: claude.ai の自動検出 MCP (Atlassian/Gmail 等) を無効化し、
-  // 明示的に渡した MCP サーバのみ使用。credentials.json の OAuth トークンは参照される。
-  if (input.mcpConfig) {
-    args.push('--strict-mcp-config', '--mcp-config', JSON.stringify(input.mcpConfig));
-  }
+  // MCP サーバは credentials.json から自動検出。不要なコネクタは
+  // server.ts 側の disallowedTools パターンでブロック。
 
   const exec = await container.exec({
     Cmd: ['claude', ...args],
