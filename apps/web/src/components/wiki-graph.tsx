@@ -41,9 +41,50 @@ function colorFor(folder: string): string {
   return FOLDER_COLORS[folder] ?? '#8e8e8e';
 }
 
+// Obsidian-style physics parameters. User can adjust live.
+interface GraphSettings {
+  /** ノード間の反発力 (負の値が強い反発)。Obsidian の "Repel force" 相当 */
+  repel: number;
+  /** リンクの自然長。Obsidian の "Link force" 相当 */
+  linkDistance: number;
+  /** 中心への求心力 (0 = なし)。Obsidian の "Center force" 相当 */
+  centerStrength: number;
+  /** ノード半径スケール */
+  nodeSize: number;
+  /** ラベル表示の感度 (ズーム閾値) */
+  labelZoomThreshold: number;
+}
+
+const DEFAULT_SETTINGS: GraphSettings = {
+  repel: -120,
+  linkDistance: 60,
+  centerStrength: 0.05,
+  nodeSize: 1.0,
+  labelZoomThreshold: 1.1,
+};
+
+const STORAGE_KEY = 'cc-hub-wiki-graph-settings';
+
 export function WikiGraph({ nodes, links, onNodeClick, selectedId }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const fgRef = useRef<unknown>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 800, h: 520 });
+  const [settings, setSettings] = useState<GraphSettings>(() => {
+    if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+    try {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    } catch { /* noop */ }
+    return DEFAULT_SETTINGS;
+  });
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  // 設定を localStorage に永続化
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch { /* noop */ }
+  }, [settings]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -70,10 +111,36 @@ export function WikiGraph({ nodes, links, onNodeClick, selectedId }: Props) {
     return { graphData: { nodes, links }, degree: d };
   }, [nodes, links]);
 
+  // settings が変わるたびに d3-force パラメータを更新して再シミュレーション
+  useEffect(() => {
+    const fg = fgRef.current as {
+      d3Force?: (name: string) => { strength?: (v: number) => void; distance?: (v: number) => void } | undefined;
+      d3ReheatSimulation?: () => void;
+    } | null;
+    if (!fg || !fg.d3Force) return;
+    const charge = fg.d3Force('charge');
+    if (charge && charge.strength) charge.strength(settings.repel);
+    const link = fg.d3Force('link');
+    if (link && link.distance) link.distance(settings.linkDistance);
+    const center = fg.d3Force('center');
+    if (center && center.strength) center.strength(settings.centerStrength);
+    if (fg.d3ReheatSimulation) fg.d3ReheatSimulation();
+  }, [settings.repel, settings.linkDistance, settings.centerStrength]);
+
   return (
-    <div ref={wrapRef} className="h-full w-full overflow-hidden rounded-card" style={{ backgroundColor: '#1e1e20' }}>
+    <div ref={wrapRef} className="relative h-full w-full overflow-hidden rounded-card" style={{ backgroundColor: '#1e1e20' }}>
+      {/* 物理パラメータ調整パネル */}
+      <SettingsPanel
+        open={panelOpen}
+        onToggle={() => setPanelOpen((v) => !v)}
+        settings={settings}
+        onChange={setSettings}
+        onReset={() => setSettings(DEFAULT_SETTINGS)}
+      />
+
       {size.w > 0 && size.h > 0 && (
         <ForceGraph2D
+          ref={fgRef as never}
           graphData={graphData}
           width={size.w}
           height={size.h}
@@ -93,13 +160,10 @@ export function WikiGraph({ nodes, links, onNodeClick, selectedId }: Props) {
             const fontSize = 11 / globalScale;
             const isSelected = selectedId === n.id;
             const deg = degree.get(n.id) ?? 0;
-            // Base radius 3; add 0.8 per connection, cap at 10. Selected
-            // nodes get a bump so they stand out in the cluster.
-            const base = Math.min(10, 3 + deg * 0.8);
+            const base = Math.min(10, 3 + deg * 0.8) * settings.nodeSize;
             const radius = isSelected ? base + 2 : base;
             const color = colorFor(n.folder);
 
-            // Outer subtle glow for selected node
             if (isSelected) {
               ctx.beginPath();
               ctx.arc(n.x ?? 0, n.y ?? 0, radius + 4, 0, 2 * Math.PI, false);
@@ -112,9 +176,7 @@ export function WikiGraph({ nodes, links, onNodeClick, selectedId }: Props) {
             ctx.fillStyle = color;
             ctx.fill();
 
-            // Labels: only draw when zoomed in enough OR selected, to keep
-            // the overview uncluttered like Obsidian's graph.
-            if (globalScale > 1.1 || isSelected || deg >= 3) {
+            if (globalScale > settings.labelZoomThreshold || isSelected || deg >= 3) {
               ctx.font = `${fontSize}px "Inter", sans-serif`;
               ctx.textAlign = 'left';
               ctx.textBaseline = 'middle';
@@ -125,7 +187,7 @@ export function WikiGraph({ nodes, links, onNodeClick, selectedId }: Props) {
           nodePointerAreaPaint={(node, color, ctx) => {
             const n = node as GraphNode;
             const deg = degree.get(n.id) ?? 0;
-            const radius = Math.min(10, 3 + deg * 0.8) + 3;
+            const radius = Math.min(10, 3 + deg * 0.8) * settings.nodeSize + 3;
             ctx.fillStyle = color;
             ctx.beginPath();
             ctx.arc(n.x ?? 0, n.y ?? 0, radius, 0, 2 * Math.PI, false);
@@ -134,5 +196,136 @@ export function WikiGraph({ nodes, links, onNodeClick, selectedId }: Props) {
         />
       )}
     </div>
+  );
+}
+
+function SettingsPanel({
+  open,
+  onToggle,
+  settings,
+  onChange,
+  onReset,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  settings: GraphSettings;
+  onChange: (s: GraphSettings) => void;
+  onReset: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 font-sans text-[12px] text-white/80 backdrop-blur-sm hover:bg-black/60"
+        aria-label="グラフ設定"
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+        <span>{open ? '閉じる' : '設定'}</span>
+      </button>
+
+      {open && (
+        <div className="absolute right-3 top-14 z-10 w-72 space-y-4 rounded-card border border-white/10 bg-[#26262a]/95 p-4 text-white/85 shadow-xl backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <h4 className="font-sans text-[12px] font-medium uppercase tracking-[0.5px] text-white/60">
+              グラフの物理
+            </h4>
+            <button
+              type="button"
+              onClick={onReset}
+              className="font-sans text-[11px] text-white/50 hover:text-white"
+            >
+              リセット
+            </button>
+          </div>
+
+          <Slider
+            label="反発力"
+            hint="ノード同士の離れ具合"
+            value={-settings.repel}
+            min={0}
+            max={500}
+            step={10}
+            onChange={(v) => onChange({ ...settings, repel: -v })}
+          />
+          <Slider
+            label="リンク距離"
+            hint="リンクの自然な長さ"
+            value={settings.linkDistance}
+            min={10}
+            max={300}
+            step={5}
+            onChange={(v) => onChange({ ...settings, linkDistance: v })}
+          />
+          <Slider
+            label="中心への求心力"
+            hint="ノードが中心に寄る強さ"
+            value={settings.centerStrength}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={(v) => onChange({ ...settings, centerStrength: v })}
+          />
+          <Slider
+            label="ノードサイズ"
+            hint="円の大きさ倍率"
+            value={settings.nodeSize}
+            min={0.5}
+            max={2.5}
+            step={0.1}
+            onChange={(v) => onChange({ ...settings, nodeSize: v })}
+          />
+          <Slider
+            label="ラベル表示の閾値"
+            hint="小さいとラベルが見える"
+            value={settings.labelZoomThreshold}
+            min={0}
+            max={3}
+            step={0.1}
+            onChange={(v) => onChange({ ...settings, labelZoomThreshold: v })}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+function Slider({
+  label,
+  hint,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block">
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="font-sans text-[12px] text-white/80">{label}</span>
+        <span className="font-mono text-[11px] text-white/50">{value.toFixed(step < 1 ? 2 : 0)}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-[#c96442]"
+      />
+      {hint && <div className="mt-0.5 font-sans text-[10px] text-white/40">{hint}</div>}
+    </label>
   );
 }

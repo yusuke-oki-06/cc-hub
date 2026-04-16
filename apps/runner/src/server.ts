@@ -1037,6 +1037,7 @@ app.post('/api/schedules', async (c) => {
     prompt?: string;
     profileId?: string;
     projectId?: string;
+    enabledMcpSlugs?: string[] | null;
   };
   if (!body.name || !body.prompt) {
     return c.json({ error: 'name/prompt は必須' }, 400);
@@ -1049,6 +1050,7 @@ app.post('/api/schedules', async (c) => {
       prompt: body.prompt,
       profileId: body.profileId ?? 'default',
       projectId: body.projectId ?? null,
+      enabledMcpSlugs: body.enabledMcpSlugs ?? null,
     });
     return c.json(row);
   } catch (err) {
@@ -1061,12 +1063,51 @@ app.delete('/api/schedules/:id', async (c) => {
   return c.json({ ok: true });
 });
 app.post('/api/schedules/:id/run', async (c) => {
-  const { getSchedule } = await import('./services/scheduler.js');
-  const { fireScheduledRun } = await import('./services/scheduled-run.js');
-  const s = await getSchedule(c.get('userId'), c.req.param('id'));
+  const userId = c.get('userId');
+  await assertBudgetOk(userId);
+  const { getSchedule, markScheduleFired } = await import('./services/scheduler.js');
+  const s = await getSchedule(userId, c.req.param('id'));
   if (!s) return c.json({ error: 'not found' }, 404);
-  const taskId = await fireScheduledRun(s);
-  return c.json({ ok: true, taskId });
+
+  // 1. task 作成
+  const profile = await getProfile(s.profileId);
+  const task = await createTask({
+    userId,
+    profileId: profile.id,
+    projectId: s.projectId ?? undefined,
+    prompt: s.prompt,
+  });
+  await markScheduleFired(s.id, task.id);
+
+  // 2. session 作成 (routine 固有の MCP 選択を適用)
+  const session = await createSession({
+    userId,
+    taskId: task.id,
+    profile,
+    enabledMcpSlugs: s.enabledMcpSlugs ?? undefined,
+  });
+  await writeAudit({
+    userId,
+    sessionId: session.sessionId,
+    taskId: task.id,
+    kind: 'system',
+    payload: { event: 'session.created', profileId: profile.id, scheduleId: s.id },
+  });
+  await publishEvent({
+    sessionId: session.sessionId,
+    eventType: 'system.init',
+    payload: {
+      sessionId: session.sessionId,
+      taskId: task.id,
+      profileId: profile.id,
+      containerId: session.sandbox.containerId,
+    },
+  });
+
+  // 3. Claude 起動 (最初のターン)
+  await runTurn(session, { prompt: s.prompt, isFirstTurn: true });
+
+  return c.json({ ok: true, taskId: task.id, sessionId: session.sessionId });
 });
 
 // ---------- Dev helpers ----------

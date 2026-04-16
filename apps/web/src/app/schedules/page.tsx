@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
+import { ConnectorPicker } from '@/components/connector-picker';
 
 interface Schedule {
   id: string;
@@ -13,6 +14,7 @@ interface Schedule {
   cronExpr: string | null;
   prompt: string;
   profileId: string;
+  enabledMcpSlugs: string[] | null;
   enabled: boolean;
   lastRunAt: string | null;
   lastTaskId: string | null;
@@ -39,6 +41,8 @@ export default function SchedulesPage() {
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
+  // ルーティン作成フォームのコネクタ選択状態 (undefined = 初期化前)
+  const [formEnabledMcp, setFormEnabledMcp] = useState<Set<string> | undefined>(undefined);
 
   const load = async () => {
     try {
@@ -64,7 +68,12 @@ export default function SchedulesPage() {
     try {
       await api('/api/schedules', {
         method: 'POST',
-        body: JSON.stringify({ name, cronExpr: opt?.cron ?? null, prompt }),
+        body: JSON.stringify({
+          name,
+          cronExpr: opt?.cron ?? null,
+          prompt,
+          enabledMcpSlugs: formEnabledMcp ? [...formEnabledMcp] : null,
+        }),
       });
       setName('');
       setPrompt('');
@@ -147,6 +156,25 @@ export default function SchedulesPage() {
             )}
           </label>
 
+          <div>
+            <div className="mb-1 text-[12px] font-medium text-stone">コネクタ</div>
+            <ConnectorPicker
+              enabledSlugs={formEnabledMcp}
+              onToggle={(slug, on) => {
+                setFormEnabledMcp((prev) => {
+                  const next = new Set(prev ?? []);
+                  if (on) next.add(slug);
+                  else next.delete(slug);
+                  return next;
+                });
+              }}
+              onInitialize={(all) => setFormEnabledMcp(new Set(all))}
+            />
+            <div className="mt-1 text-[11px] text-stone">
+              このルーティン実行時に有効化するコネクタを選択できます。
+            </div>
+          </div>
+
           <label className="block">
             <div className="mb-1 text-[12px] font-medium text-stone">プロンプト</div>
             <textarea
@@ -190,6 +218,11 @@ export default function SchedulesPage() {
                     <span className="rounded-full bg-ivory px-2 py-0.5 font-mono text-[11px] text-stone">
                       {cronToLabel(s.cronExpr)}
                     </span>
+                    {s.enabledMcpSlugs && s.enabledMcpSlugs.length > 0 && (
+                      <span className="rounded-full bg-[#faf3dd] px-2 py-0.5 font-sans text-[11px] text-olive">
+                        コネクタ: {s.enabledMcpSlugs.join(', ')}
+                      </span>
+                    )}
                   </div>
                   <div className="line-clamp-2 font-sans text-[12px] text-olive">{s.prompt}</div>
                   <div className="font-mono text-[10px] text-stone">

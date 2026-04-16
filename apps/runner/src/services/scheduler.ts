@@ -10,6 +10,8 @@ export interface Schedule {
   prompt: string;
   profileId: string;
   projectId: string | null;
+  /** 有効化するコネクタ slug のリスト。null = 全有効 (従来挙動)。 */
+  enabledMcpSlugs: string[] | null;
   enabled: boolean;
   lastRunAt: string | null;
   lastTaskId: string | null;
@@ -27,6 +29,7 @@ export async function listSchedules(userId: string): Promise<Schedule[]> {
            prompt,
            profile_id        AS "profileId",
            project_id::text  AS "projectId",
+           enabled_mcp_slugs AS "enabledMcpSlugs",
            enabled,
            last_run_at::text AS "lastRunAt",
            last_task_id::text AS "lastTaskId",
@@ -44,15 +47,18 @@ export async function createSchedule(input: {
   prompt: string;
   profileId?: string;
   projectId?: string | null;
+  enabledMcpSlugs?: string[] | null;
 }): Promise<Schedule> {
   if (input.cronExpr !== null && !cron.validate(input.cronExpr)) {
     throw new Error(`invalid cron expression: ${input.cronExpr}`);
   }
+  const slugs = input.enabledMcpSlugs ?? null;
   const [row] = await sql<Schedule[]>`
-    INSERT INTO schedules (user_id, name, cron_expr, prompt, profile_id, project_id)
+    INSERT INTO schedules (user_id, name, cron_expr, prompt, profile_id, project_id, enabled_mcp_slugs)
     VALUES (${input.userId}::uuid, ${input.name}, ${input.cronExpr}, ${input.prompt},
             ${input.profileId ?? 'default'},
-            ${input.projectId ?? null}${input.projectId ? sql`::uuid` : sql``})
+            ${input.projectId ?? null}${input.projectId ? sql`::uuid` : sql``},
+            ${slugs === null ? null : sql.json(slugs as never)})
     RETURNING id::text,
               user_id::text     AS "userId",
               name,
@@ -60,6 +66,7 @@ export async function createSchedule(input: {
               prompt,
               profile_id        AS "profileId",
               project_id::text  AS "projectId",
+              enabled_mcp_slugs AS "enabledMcpSlugs",
               enabled,
               last_run_at::text AS "lastRunAt",
               last_task_id::text AS "lastTaskId",
@@ -79,6 +86,7 @@ export async function getSchedule(userId: string, id: string): Promise<Schedule 
            prompt,
            profile_id        AS "profileId",
            project_id::text  AS "projectId",
+           enabled_mcp_slugs AS "enabledMcpSlugs",
            enabled,
            last_run_at::text AS "lastRunAt",
            last_task_id::text AS "lastTaskId",
@@ -135,6 +143,7 @@ export async function startScheduler(): Promise<void> {
            prompt,
            profile_id        AS "profileId",
            project_id::text  AS "projectId",
+           enabled_mcp_slugs AS "enabledMcpSlugs",
            enabled,
            last_run_at::text AS "lastRunAt",
            last_task_id::text AS "lastTaskId",
