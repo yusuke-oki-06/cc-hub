@@ -69,6 +69,26 @@ export async function createSchedule(input: {
   return row;
 }
 
+export async function getSchedule(userId: string, id: string): Promise<Schedule | null> {
+  const [row] = await sql<Schedule[]>`
+    SELECT id::text,
+           user_id::text     AS "userId",
+           name,
+           cron_expr         AS "cronExpr",
+           prompt,
+           profile_id        AS "profileId",
+           project_id::text  AS "projectId",
+           enabled,
+           last_run_at::text AS "lastRunAt",
+           last_task_id::text AS "lastTaskId",
+           created_at::text  AS "createdAt"
+      FROM schedules
+     WHERE id = ${id}::uuid AND user_id = ${userId}::uuid
+     LIMIT 1
+  `;
+  return row ?? null;
+}
+
 export async function deleteSchedule(userId: string, id: string): Promise<void> {
   await sql`
     DELETE FROM schedules

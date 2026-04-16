@@ -1020,6 +1020,14 @@ app.delete('/api/schedules/:id', async (c) => {
   await deleteSchedule(c.get('userId'), c.req.param('id'));
   return c.json({ ok: true });
 });
+app.post('/api/schedules/:id/run', async (c) => {
+  const { getSchedule } = await import('./services/scheduler.js');
+  const { fireScheduledRun } = await import('./services/scheduled-run.js');
+  const s = await getSchedule(c.get('userId'), c.req.param('id'));
+  if (!s) return c.json({ error: 'not found' }, 404);
+  const taskId = await fireScheduledRun(s);
+  return c.json({ ok: true, taskId });
+});
 
 // ---------- Dev helpers ----------
 app.post('/api/dev/publish', async (c) => {

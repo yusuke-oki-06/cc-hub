@@ -11,7 +11,7 @@ import { markScheduleFired, type Schedule } from './scheduler.js';
  * This keeps schedules in "queued" state and gives the user explicit
  * control over sandbox spawning while still making the prompt discoverable.
  */
-export async function fireScheduledRun(s: Schedule): Promise<void> {
+export async function fireScheduledRun(s: Schedule): Promise<string> {
   const task = await createTask({
     userId: s.userId,
     profileId: s.profileId,
@@ -20,4 +20,5 @@ export async function fireScheduledRun(s: Schedule): Promise<void> {
   });
   await markScheduleFired(s.id, task.id);
   console.log(`[scheduler] fired schedule ${s.id} → task ${task.id}`);
+  return task.id;
 }
