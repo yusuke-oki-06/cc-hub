@@ -1,5 +1,7 @@
 import Docker from 'dockerode';
+import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
+import { StreamJsonParser } from './stream-parser.js';
 import type { ClaudeStreamEvent, ClaudeStdinMessage } from '@cc-hub/shared';
 
 const docker = new Docker();
@@ -100,27 +102,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<SandboxH
 
   await container.start();
 
-  // CLI の初回セットアップ (テーマ選択 / オンボーディング) をスキップするため、
-  // `-p "init"` でダミー実行して初期化ファイル群を生成させる。
-  // これにより interactive モードでもオンボーディングが出なくなる。
-  try {
-    const initExec = await container.exec({
-      Cmd: ['claude', '-p', 'respond with OK', '--max-turns=1'],
-      AttachStdout: true,
-      AttachStderr: true,
-      Tty: false,
-    });
-    const initStream = await initExec.start({});
-    await new Promise<void>((resolve) => {
-      initStream.on('end', resolve);
-      initStream.on('error', resolve);
-      // 安全弁: 15 秒で打ち切り
-      setTimeout(resolve, 15_000);
-    });
-    console.log('[docker-driver] CLI init (onboarding skip) completed');
-  } catch (err) {
-    console.warn('[docker-driver] CLI init failed (onboarding may appear)', err);
-  }
+  // stream-json mode (-p) ではオンボーディングは出ないため init exec 不要。
 
   return {
     containerId: container.id,
@@ -156,19 +138,14 @@ async function startClaudeExec(
   container: Docker.Container,
   input: ClaudeExecInput,
 ): Promise<ClaudeExecHandle> {
-  // 注意: `--input-format=stream-json` を指定すると Claude は stdin から JSON メッセージを待つ。
-  // Phase 1 は初回プロンプトを `-p <prompt>` で渡し、追加メッセージは別 exec で流す方式に
-  // する (send() は互換のため残すが stdin 経由での追送信は本節では未使用)。
-  // 対話モード (--print なし) で起動し、stdin 経由で prompt を送信する。
-  // これにより CLI の完全な TUI (スパークル、色分け、タスクリスト等) が
-  // ANSI エスケープとして出力される。
-  // -p (print) mode + Tty: true — 安定動作を優先。
-  // Interactive mode は OAuth 再認証 / オンボーディングが避けられないため使わない。
-  // -p + Tty: true で markdown のカラー出力は得られる。
-  // 将来 CLI 側に --no-onboarding / --headless-interactive が追加されたら切り替える。
-  const args: string[] = [
+  // -p + --output-format=stream-json: 構造化 JSON イベントを stdout に出力。
+  // thinking / tool_use / task_list 等の構造化データを React で描画する。
+  const args = [
     '-p',
     input.prompt,
+    '--output-format=stream-json',
+    '--verbose',
+    '--include-partial-messages',
     `--max-turns=${input.maxTurns}`,
   ];
   if (input.allowedTools.length > 0) args.push('--allowedTools', input.allowedTools.join(' '));
@@ -180,36 +157,34 @@ async function startClaudeExec(
     args.push('--permission-mode', input.permissionMode);
   }
 
-  // Tty: true にすることで CLI に「ターミナルに繋がっている」と認識させ、
-  // スパークルアニメ・色分け・タスクリストなど CLI 本来の描画を ANSI エスケ
-  // ープとして出力させる。stream-json ではなく生の ANSI 出力を転送し、
-  // Web 側で xterm.js に feed する。
   const exec = await container.exec({
     Cmd: ['claude', ...args],
-    AttachStdin: true,
+    AttachStdin: false,
     AttachStdout: true,
     AttachStderr: true,
-    Tty: true,
+    Tty: false,
     WorkingDir: '/workspace',
-    Env: ['TERM=xterm-256color', 'COLUMNS=120', 'LINES=40'],
   });
 
-  const duplex = (await exec.start({ hijack: true, stdin: true, Tty: true })) as NodeJS.ReadWriteStream;
+  const duplex = (await exec.start({ hijack: true, stdin: false })) as NodeJS.ReadWriteStream;
 
-  // Interactive mode: ANSI 出力を監視して状態を検出し、適切な入力を送る。
-  // 1. オンボーディング画面 ("Choose the text style") → Enter で既定テーマ選択
-  // 2. プロンプト入力待ち (> や空行) → ユーザーのプロンプトを送信
-  // -p mode: プロンプトは CLI 引数で渡済み。stdin 自動入力は不要。
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  container.modem.demuxStream(duplex, stdout, stderr);
 
-  // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
-  // 全出力をそのまま terminal.data イベントとして転送する。
+  const parser = new StreamJsonParser();
   const eventListeners = new Set<(ev: ClaudeStreamEvent) => void>();
   const exitListeners = new Set<(code: number | null) => void>();
   const errorListeners = new Set<(err: Error) => void>();
 
-  duplex.on('data', (chunk: Buffer) => {
-    const b64 = chunk.toString('base64');
-    for (const cb of eventListeners) cb({ type: 'terminal.data', data: b64 });
+  stdout.setEncoding('utf8');
+  stdout.on('data', (chunk: string) => {
+    for (const ev of parser.push(chunk)) for (const cb of eventListeners) cb(ev);
+  });
+
+  stderr.setEncoding('utf8');
+  stderr.on('data', (chunk: string) => {
+    for (const cb of eventListeners) cb({ type: 'runner.stderr', text: chunk });
   });
 
   duplex.on('error', (err) => {
@@ -231,7 +206,7 @@ async function startClaudeExec(
     exited = true;
     if (watchdog) clearTimeout(watchdog);
     if (timeLimit) clearTimeout(timeLimit);
-    // Tty モードでは stream-json パーサーを使わないため flush 不要
+    for (const ev of parser.flush()) for (const cb of eventListeners) cb(ev);
     let code: number | null = null;
     try {
       const info = await exec.inspect();
