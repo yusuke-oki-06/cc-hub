@@ -340,7 +340,6 @@ async function runTurn(
   // MCP: credentials.json から自動検出させる (Slack トークンが参照される)。
   // 不要な claude.ai コネクタは disallowedTools でブロック。
   const mcpDisallow = [
-    'mcp__claude_ai_Atlassian__*',
     'mcp__claude_ai_Gmail__*',
     'mcp__claude_ai_Google_Calendar__*',
     'mcp__claude_ai_Indeed__*',
