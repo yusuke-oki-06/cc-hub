@@ -1,6 +1,23 @@
 import { z } from 'zod';
 import { sql } from '../db/client.js';
 
+/**
+ * 管理者が「利用を許可するコネクタ」として事前設定する claude.ai 由来のコネクタ一覧。
+ * slug は Claude Code CLI のツール命名規則 `mcp__claude_ai_<slug>__*` の `<slug>` 部分。
+ * ユーザーはこのリストの中から有効化するものをセッション毎に選ぶ。
+ *
+ * ここを編集することで「組織で許可するコネクタ」を変更できる。
+ */
+export const CLAUDE_AI_CONNECTORS: { slug: string; displayName: string }[] = [
+  { slug: 'Atlassian',  displayName: 'Atlassian (Jira / Confluence)' },
+  { slug: 'Slack',      displayName: 'Slack' },
+];
+
+/** 指定 slug のコネクタをブロックする disallowedTools パターン。 */
+export function mcpDisallowPattern(slug: string): string {
+  return `mcp__claude_ai_${slug}__*`;
+}
+
 export const McpIntegrationSchema = z.object({
   id: z.string().uuid().optional(),
   slug: z.string().min(1),
@@ -52,7 +69,11 @@ export async function upsertMcpIntegration(input: McpIntegration): Promise<void>
   `;
 }
 
-export async function getMcpForProfile(profileId: string): Promise<McpIntegration[]> {
+/** プロファイルに紐づく全 MCP を取得。enabledSlugs を渡すと追加フィルタ (未指定なら全て)。 */
+export async function getMcpForProfile(
+  profileId: string,
+  enabledSlugs?: string[],
+): Promise<McpIntegration[]> {
   const rows = await sql<{
     id: string;
     slug: string;
@@ -67,7 +88,7 @@ export async function getMcpForProfile(profileId: string): Promise<McpIntegratio
     JOIN profile_mcp pm ON pm.mcp_id = m.id
     WHERE pm.profile_id = ${profileId} AND m.enabled = TRUE
   `;
-  return rows.map((r) => ({
+  const all = rows.map((r) => ({
     id: r.id,
     slug: r.slug,
     displayName: r.display_name,
@@ -76,6 +97,9 @@ export async function getMcpForProfile(profileId: string): Promise<McpIntegratio
     env: (r.env as Record<string, string>) ?? {},
     enabled: r.enabled,
   }));
+  if (enabledSlugs === undefined) return all;
+  const set = new Set(enabledSlugs);
+  return all.filter((m) => set.has(m.slug));
 }
 
 export async function setProfileMcp(profileId: string, mcpIds: string[]): Promise<void> {

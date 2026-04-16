@@ -7,12 +7,15 @@ import {
   type GuiPermissionMode,
 } from '@cc-hub/shared';
 import { SkillPicker } from '@/components/skill-picker';
+import { ConnectorPicker } from '@/components/connector-picker';
 
 export interface ComposerSubmit {
   text: string;
   model?: ClaudeModelId;
   permissionMode?: GuiPermissionMode;
   allowedTools?: string[];
+  /** このターンで有効化する MCP slug。undefined = 全て有効。 */
+  enabledMcpSlugs?: string[];
 }
 
 export interface PromptComposerProps {
@@ -50,11 +53,31 @@ export function PromptComposer({
   const [slash, setSlash] = useState<
     { start: number; query: string; top: number; left: number } | null
   >(null);
+  // 有効な MCP slug (undefined = 未初期化、初回ロード時に全ON)
+  const [enabledMcpSlugs, setEnabledMcpSlugs] = useState<Set<string> | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    try {
+      const saved = window.localStorage.getItem('cc-hub-enabled-mcp');
+      if (saved) return new Set<string>(JSON.parse(saved));
+    } catch { /* noop */ }
+    return undefined;
+  });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setText('');
   }, [resetKey]);
+
+  // MCP 選択を localStorage に永続化
+  useEffect(() => {
+    if (enabledMcpSlugs === undefined) return;
+    try {
+      window.localStorage.setItem(
+        'cc-hub-enabled-mcp',
+        JSON.stringify([...enabledMcpSlugs]),
+      );
+    } catch { /* noop */ }
+  }, [enabledMcpSlugs]);
 
   const handleSend = async () => {
     if (!text.trim() || sending || disabled) return;
@@ -64,6 +87,7 @@ export function PromptComposer({
         text,
         model,
         permissionMode: mode === 'default' ? undefined : mode,
+        enabledMcpSlugs: enabledMcpSlugs ? [...enabledMcpSlugs] : undefined,
       });
       setText('');
     } finally {
@@ -146,6 +170,18 @@ export function PromptComposer({
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-cream bg-parchment/40 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <PlusMenuSimple onPickSkill={() => setSkillModal(true)} />
+            <ConnectorPicker
+              enabledSlugs={enabledMcpSlugs}
+              onToggle={(slug, on) => {
+                setEnabledMcpSlugs((prev) => {
+                  const next = new Set(prev ?? []);
+                  if (on) next.add(slug);
+                  else next.delete(slug);
+                  return next;
+                });
+              }}
+              onInitialize={(allSlugs) => setEnabledMcpSlugs(new Set(allSlugs))}
+            />
           </div>
           <div className="flex items-center gap-2">
             <ModeSelector value={mode} onChange={setMode} />

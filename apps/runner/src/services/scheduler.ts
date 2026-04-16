@@ -5,7 +5,8 @@ export interface Schedule {
   id: string;
   userId: string;
   name: string;
-  cronExpr: string;
+  /** null = manual-only routine (not registered with node-cron). */
+  cronExpr: string | null;
   prompt: string;
   profileId: string;
   projectId: string | null;
@@ -39,12 +40,12 @@ export async function listSchedules(userId: string): Promise<Schedule[]> {
 export async function createSchedule(input: {
   userId: string;
   name: string;
-  cronExpr: string;
+  cronExpr: string | null;
   prompt: string;
   profileId?: string;
   projectId?: string | null;
 }): Promise<Schedule> {
-  if (!cron.validate(input.cronExpr)) {
+  if (input.cronExpr !== null && !cron.validate(input.cronExpr)) {
     throw new Error(`invalid cron expression: ${input.cronExpr}`);
   }
   const [row] = await sql<Schedule[]>`
@@ -101,11 +102,13 @@ export async function deleteSchedule(userId: string, id: string): Promise<void> 
   }
 }
 
-/** Register one schedule with node-cron. Idempotent: replaces any existing task for the id. */
+/** Register one schedule with node-cron. Idempotent: replaces any existing task for the id.
+ *  cronExpr === null means manual-only — no cron registration. */
 function scheduleOne(s: Schedule): void {
   if (!s.enabled) return;
   const existing = tasks.get(s.id);
   if (existing) existing.stop();
+  if (!s.cronExpr) return;
   const task = cron.schedule(
     s.cronExpr,
     async () => {

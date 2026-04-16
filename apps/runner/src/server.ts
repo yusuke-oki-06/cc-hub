@@ -171,6 +171,9 @@ const CreateSessionSchema = z.object({
   profileId: z.string().default('default'),
   prompt: z.string().min(1),
   projectId: z.string().uuid().optional(),
+  /** プロファイルに紐づく MCP のうち、このセッションで有効化する slug。
+   *  未指定 = 全て有効 (従来挙動)。 */
+  enabledMcpSlugs: z.array(z.string()).optional(),
 });
 app.post('/api/sessions', async (c) => {
   const userId = c.get('userId');
@@ -187,7 +190,12 @@ app.post('/api/sessions', async (c) => {
     projectId: parsed.data.projectId,
     prompt: parsed.data.prompt,
   });
-  const session = await createSession({ userId, taskId: task.id, profile });
+  const session = await createSession({
+    userId,
+    taskId: task.id,
+    profile,
+    enabledMcpSlugs: parsed.data.enabledMcpSlugs,
+  });
   await writeAudit({
     userId,
     sessionId: session.sessionId,
@@ -338,14 +346,26 @@ async function runTurn(
     `[runTurn] session=${session.sessionId.slice(0, 8)} task=${session.taskId.slice(0, 8)} profile=${profile.id} model=${ov.model ?? '(default)'} mode=${ov.permissionMode ?? 'default'} firstTurn=${opts.isFirstTurn} resume=${session.claudeSessionId ?? 'none'} allowedTools=${allowedTools.length} prompt="${opts.prompt.slice(0, 80)}"`,
   );
   // MCP: credentials.json から自動検出させる (Slack トークンが参照される)。
-  // 不要な claude.ai コネクタは disallowedTools でブロック。
-  const mcpDisallow = [
+  // 管理者が CLAUDE_AI_CONNECTORS に登録していないコネクタはすべてブロック。
+  // ユーザーが session.enabledMcpSlugs で有効化していないものもブロック。
+  const { CLAUDE_AI_CONNECTORS, mcpDisallowPattern } = await import('./services/mcp.js');
+  const enabledSet = session.enabledMcpSlugs ? new Set(session.enabledMcpSlugs) : null;
+  // ハードコードの「組織として使わないコネクタ」(credentials.json に混ざっても遮断)
+  const baseDisallow = [
     'mcp__claude_ai_Gmail__*',
     'mcp__claude_ai_Google_Calendar__*',
     'mcp__claude_ai_Indeed__*',
     'mcp__claude_ai_MoneyForward_Dashboard__*',
     'mcp__claude_ai_Microsoft_Learn__*',
   ];
+  const userDisabled = CLAUDE_AI_CONNECTORS
+    .filter((c) => enabledSet && !enabledSet.has(c.slug))
+    .map((c) => mcpDisallowPattern(c.slug));
+  // Web 検索: ユーザーが OFF にしたら WebSearch / WebFetch を両方ブロック
+  const webDisabled = enabledSet && !enabledSet.has('WebSearch')
+    ? ['WebSearch', 'WebFetch']
+    : [];
+  const mcpDisallow = [...baseDisallow, ...userDisabled, ...webDisabled];
 
   const exec = await session.sandbox.execClaude({
     prompt: opts.prompt,
@@ -675,6 +695,26 @@ app.get('/api/audit', async (c) => {
 
 // ---------- MCP integrations (admin) ----------
 app.get('/api/integrations', async (c) => c.json({ integrations: await listMcpIntegrations() }));
+
+/** 指定プロファイルで利用可能なコネクタを返す (ユーザー向け、シークレット除外)。
+ *  admin が mcp_integrations に登録した MCP + claude.ai 由来の事前設定コネクタ +
+ *  Claude 組み込みの Web 検索を返す。 */
+app.get('/api/mcp/available', async (c) => {
+  const profileId = c.req.query('profileId') ?? 'default';
+  const { getMcpForProfile, CLAUDE_AI_CONNECTORS } = await import('./services/mcp.js');
+  const mcp = await getMcpForProfile(profileId);
+  const connectors: { slug: string; displayName: string }[] = [];
+  // 組み込み Web 検索 (プロファイルが許可している場合のみ選択肢に出す)
+  const profile = await getProfile(profileId);
+  if (profile.allowWebSearch || profile.allowWebFetch) {
+    connectors.push({ slug: 'WebSearch', displayName: 'Web 検索' });
+  }
+  connectors.push(
+    ...CLAUDE_AI_CONNECTORS.map((c) => ({ slug: c.slug, displayName: c.displayName })),
+    ...mcp.map((m) => ({ slug: m.slug, displayName: m.displayName })),
+  );
+  return c.json({ connectors });
+});
 app.post('/api/integrations', async (c) => {
   const parsed = McpIntegrationSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
@@ -993,19 +1033,19 @@ app.post('/api/schedules', async (c) => {
   const { createSchedule } = await import('./services/scheduler.js');
   const body = (await c.req.json().catch(() => ({}))) as {
     name?: string;
-    cronExpr?: string;
+    cronExpr?: string | null;
     prompt?: string;
     profileId?: string;
     projectId?: string;
   };
-  if (!body.name || !body.cronExpr || !body.prompt) {
-    return c.json({ error: 'name/cronExpr/prompt は必須' }, 400);
+  if (!body.name || !body.prompt) {
+    return c.json({ error: 'name/prompt は必須' }, 400);
   }
   try {
     const row = await createSchedule({
       userId: c.get('userId'),
       name: body.name,
-      cronExpr: body.cronExpr,
+      cronExpr: body.cronExpr ?? null,
       prompt: body.prompt,
       profileId: body.profileId ?? 'default',
       projectId: body.projectId ?? null,

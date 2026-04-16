@@ -20,6 +20,9 @@ export interface ActiveSession {
   claudeSessionId?: string;       // Claude CLI's internal session id, captured from system.init
   createdAt: number;
   lastActivityAt: number;
+  /** ユーザーが本セッションで有効化した MCP コネクタ slug 集合。
+   *  未指定 (undefined) = すべて有効 (従来挙動)。 */
+  enabledMcpSlugs?: string[];
 }
 
 export function touchSession(sessionId: string): void {
@@ -58,6 +61,9 @@ export interface CreateSessionInput {
   userId: string;
   taskId: string;
   profile: ToolProfile;
+  /** 指定すると、プロファイルに紐づく MCP の中で slug が一致するものだけを有効化。
+   *  undefined の場合はプロファイル全MCPを使用 (従来挙動)。 */
+  enabledMcpSlugs?: string[];
 }
 
 export async function createSession(input: CreateSessionInput): Promise<ActiveSession> {
@@ -74,7 +80,7 @@ export async function createSession(input: CreateSessionInput): Promise<ActiveSe
   }
   const sessionId = randomUUID();
 
-  const mcp = await getMcpForProfile(input.profile.id);
+  const mcp = await getMcpForProfile(input.profile.id, input.enabledMcpSlugs);
 
   // If an Obsidian vault is configured on the host, expose it inside every
   // container at /workspace/wiki so Claude can read/write the Wiki using the
@@ -166,6 +172,7 @@ export async function createSession(input: CreateSessionInput): Promise<ActiveSe
     sandbox,
     createdAt: Date.now(),
     lastActivityAt: Date.now(),
+    enabledMcpSlugs: input.enabledMcpSlugs,
   };
   active.set(sessionId, session);
   ensureIdleSweeper();

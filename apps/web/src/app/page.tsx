@@ -7,6 +7,7 @@ import { SiSlack, SiJira } from 'react-icons/si';
 import { TokenSetup } from '@/components/token-setup';
 import { SkillPicker, type SkillItem } from '@/components/skill-picker';
 import { MoveToProjectModal } from '@/components/move-to-project-modal';
+import { ConnectorPicker } from '@/components/connector-picker';
 import {
   CLAUDE_MODELS,
   GUI_PERMISSION_MODES,
@@ -108,6 +109,22 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loading = phase !== 'idle';
 
+  // MCP コネクタ選択状態 (localStorage 永続化)
+  const [enabledMcpSlugs, setEnabledMcpSlugs] = useState<Set<string> | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    try {
+      const saved = window.localStorage.getItem('cc-hub-enabled-mcp');
+      if (saved) return new Set<string>(JSON.parse(saved));
+    } catch { /* noop */ }
+    return undefined;
+  });
+  useEffect(() => {
+    if (enabledMcpSlugs === undefined) return;
+    try {
+      window.localStorage.setItem('cc-hub-enabled-mcp', JSON.stringify([...enabledMcpSlugs]));
+    } catch { /* noop */ }
+  }, [enabledMcpSlugs]);
+
   // Random headline, picked on client mount to avoid SSR hydration mismatch.
   const [greeting, setGreeting] = useState<{ headline: string }>({
     headline: '今日は何をしましょう?',
@@ -128,7 +145,12 @@ export default function Home() {
     try {
       const created = await api<{ sessionId: string; taskId: string }>('/api/sessions', {
         method: 'POST',
-        body: JSON.stringify({ profileId, prompt, projectId }),
+        body: JSON.stringify({
+          profileId,
+          prompt,
+          projectId,
+          enabledMcpSlugs: enabledMcpSlugs ? [...enabledMcpSlugs] : undefined,
+        }),
       });
 
       if (mode === 'upload' && files.length > 0) {
@@ -331,6 +353,18 @@ export default function Home() {
             {files.length > 0 && (
               <span className="font-sans text-[12px] text-olive">添付 {files.length} 件</span>
             )}
+            <ConnectorPicker
+              enabledSlugs={enabledMcpSlugs}
+              onToggle={(slug, on) => {
+                setEnabledMcpSlugs((prev) => {
+                  const next = new Set(prev ?? []);
+                  if (on) next.add(slug);
+                  else next.delete(slug);
+                  return next;
+                });
+              }}
+              onInitialize={(allSlugs) => setEnabledMcpSlugs(new Set(allSlugs))}
+            />
           </div>
           <div className="flex items-center gap-2">
             <ModeSelector value={permissionMode} onChange={setPermissionMode} />

@@ -10,7 +10,7 @@ import { useToast } from '@/components/toast';
 interface Schedule {
   id: string;
   name: string;
-  cronExpr: string;
+  cronExpr: string | null;
   prompt: string;
   profileId: string;
   enabled: boolean;
@@ -19,11 +19,14 @@ interface Schedule {
   createdAt: string;
 }
 
-const FREQUENCY_OPTIONS = [
-  { label: '毎朝 9:00', expr: '0 9 * * *', desc: '毎日 AM 9:00' },
-  { label: '毎週月曜 10:00', expr: '0 10 * * 1', desc: '月曜日 AM 10:00' },
-  { label: '平日 18:00', expr: '0 18 * * 1-5', desc: '月〜金 PM 6:00' },
-  { label: '毎月 1 日', expr: '0 0 1 * *', desc: '毎月 1 日 AM 0:00' },
+type FreqKey = 'manual' | 'hourly' | 'daily' | 'weekdays' | 'weekly';
+
+const FREQUENCY_OPTIONS: { key: FreqKey; label: string; cron: string | null }[] = [
+  { key: 'manual',   label: 'マニュアル', cron: null },
+  { key: 'hourly',   label: '時間ごと',   cron: '0 * * * *' },
+  { key: 'daily',    label: '毎日 9:00',  cron: '0 9 * * *' },
+  { key: 'weekdays', label: '平日 9:00',  cron: '0 9 * * 1-5' },
+  { key: 'weekly',   label: '週次 (月曜 9:00)', cron: '0 9 * * 1' },
 ];
 
 export default function SchedulesPage() {
@@ -32,9 +35,7 @@ export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [selectedFreq, setSelectedFreq] = useState(0);
-  const [customCron, setCustomCron] = useState(false);
-  const [cronExpr, setCronExpr] = useState('0 9 * * *');
+  const [freqKey, setFreqKey] = useState<FreqKey>('daily');
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
@@ -58,16 +59,15 @@ export default function SchedulesPage() {
       setError('名前とプロンプトは必須です');
       return;
     }
-    const expr = customCron ? cronExpr : FREQUENCY_OPTIONS[selectedFreq]?.expr ?? cronExpr;
+    const opt = FREQUENCY_OPTIONS.find((o) => o.key === freqKey);
     setBusy(true);
     try {
       await api('/api/schedules', {
         method: 'POST',
-        body: JSON.stringify({ name, cronExpr: expr, prompt }),
+        body: JSON.stringify({ name, cronExpr: opt?.cron ?? null, prompt }),
       });
       setName('');
       setPrompt('');
-      setCustomCron(false);
       await load();
       toast.show('ルーティンを登録しました', 'success');
     } catch (err) {
@@ -107,7 +107,7 @@ export default function SchedulesPage() {
       <header>
         <h1 className="font-serif text-[32px] leading-[1.1] text-near">ルーティン</h1>
         <p className="mt-1 font-sans text-[13px] text-olive">
-          定期実行するプロンプトを登録できます。発火するとサイドバーにタスクとして追加されます。
+          定期実行するプロンプトを登録できます。マニュアルを選べば必要なときだけ実行できます。
         </p>
       </header>
 
@@ -127,47 +127,25 @@ export default function SchedulesPage() {
             />
           </label>
 
-          {/* Frequency selector */}
-          <div>
-            <div className="mb-2 text-[12px] font-medium text-stone">実行頻度</div>
-            <div className="grid grid-cols-2 gap-2">
-              {FREQUENCY_OPTIONS.map((opt, i) => (
-                <button
-                  key={opt.expr}
-                  type="button"
-                  onClick={() => {
-                    setSelectedFreq(i);
-                    setCronExpr(opt.expr);
-                    setCustomCron(false);
-                  }}
-                  className={
-                    'rounded-card border px-3 py-2.5 text-left transition ' +
-                    (!customCron && selectedFreq === i
-                      ? 'border-terracotta bg-[#faf3dd] shadow-[0_0_0_1px_#c96442]'
-                      : 'border-border-warm bg-white hover:bg-ivory')
-                  }
-                >
-                  <div className="font-medium text-near">{opt.label}</div>
-                  <div className="text-[11px] text-stone">{opt.desc}</div>
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setCustomCron((v) => !v)}
-              className="mt-2 font-sans text-[11px] text-stone hover:text-charcoal"
+          <label className="block">
+            <div className="mb-1 text-[12px] font-medium text-stone">頻度</div>
+            <select
+              value={freqKey}
+              onChange={(e) => setFreqKey(e.target.value as FreqKey)}
+              className="w-full rounded-card border border-border-warm bg-white px-3 py-2 text-near focus:outline-none focus:ring-1 focus:ring-terracotta/40"
             >
-              {customCron ? '▾ プリセットに戻す' : '▸ カスタム cron 式を入力'}
-            </button>
-            {customCron && (
-              <input
-                value={cronExpr}
-                onChange={(e) => setCronExpr(e.target.value)}
-                placeholder="分 時 日 月 曜 (例: 0 9 * * *)"
-                className="mt-1 w-full rounded-card border border-border-warm bg-white px-3 py-2 font-mono text-near focus:outline-none focus:ring-1 focus:ring-terracotta/40"
-              />
+              {FREQUENCY_OPTIONS.map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            {freqKey === 'manual' && (
+              <div className="mt-1 text-[11px] text-stone">
+                自動実行されません。このページの「今すぐ実行」ボタンでのみ起動します。
+              </div>
             )}
-          </div>
+          </label>
 
           <label className="block">
             <div className="mb-1 text-[12px] font-medium text-stone">プロンプト</div>
@@ -253,9 +231,10 @@ export default function SchedulesPage() {
   );
 }
 
-/** cron 式をわかりやすい日本語ラベルに変換 */
-function cronToLabel(expr: string): string {
-  const match = FREQUENCY_OPTIONS.find((o) => o.expr === expr);
+/** cron 式 (or null) をわかりやすい日本語ラベルに変換 */
+function cronToLabel(expr: string | null): string {
+  if (!expr) return 'マニュアル';
+  const match = FREQUENCY_OPTIONS.find((o) => o.cron === expr);
   if (match) return match.label;
   return expr;
 }
