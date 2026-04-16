@@ -1,12 +1,12 @@
--- AskUserQuestion をデフォルトプロファイルの許可ツールに追加する。
--- Claude がこのツールを呼べるようになると、テキストで質問を書くのではなく
--- 構造化された選択肢 (cc-hub 側でモーダル UI になる) を使うようになる。
+-- AskUserQuestion + ToolSearch をデフォルトプロファイルの許可ツールに追加する。
+-- ToolSearch がないと Claude は AskUserQuestion のスキーマを取得できず、
+-- テキストで質問を書くフォールバックに入る。
 
 UPDATE profiles
 SET config = jsonb_set(
   config,
   '{allowedTools}',
-  (config->'allowedTools') || '["AskUserQuestion"]'::jsonb
+  (config->'allowedTools') || '["AskUserQuestion","ToolSearch"]'::jsonb
 )
 WHERE id = 'default'
-  AND NOT (config->'allowedTools' @> '"AskUserQuestion"'::jsonb);
+  AND NOT (config->'allowedTools' @> '"ToolSearch"'::jsonb);
