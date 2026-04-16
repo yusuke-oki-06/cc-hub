@@ -205,58 +205,45 @@ async function startClaudeExec(
     }
   };
 
-  // オンボーディングは複数ステップ (テーマ選択 → 課金情報 → ...) あるため、
-  // 出力を監視して Enter を繰り返し送信し、CLI のプロンプト入力待ちを検出
-  // したらユーザーのプロンプトを送信する。
-  let enterCount = 0;
-  const MAX_AUTO_ENTERS = 8;
-
-  const handleAutoInput = (chunk: Buffer) => {
-    outputBuffer += chunk.toString('utf8');
-
-    if (promptSent) return;
-
-    // プロンプト入力待ちの検出: "❯" や ">" + 空行パターン、または
-    // 長い出力停止後に入力可能状態になったことを示すシグナル
-    const lastChunk = chunk.toString('utf8');
-    // CLI のプロンプト待ちは通常カーソル表示 ESC[?25h で終わる
-    // オンボーディング通過後は /workspace パスや ❯ マーカーが出る
-    if (outputBuffer.includes('/workspace') && !outputBuffer.includes('Choose the text style')) {
-      // オンボーディングなしでプロンプト待ちに到達した
+  // オンボーディング突破: Enter を定期的に送信 (500ms 間隔 × 最大 10 回)。
+  // CLI のプロンプト入力待ち (❯ マーカー + /workspace パス) を検出したら
+  // ユーザーのプロンプトを送信する。
+  let enterInterval: ReturnType<typeof setInterval> | undefined;
+  enterInterval = setInterval(() => {
+    if (promptSent) {
+      if (enterInterval) clearInterval(enterInterval);
+      return;
+    }
+    // プロンプト待ちになったか判定
+    // /workspace が見えてかつオンボーディング関連テキストが直近に無ければ
+    // CLI のメインプロンプトに到達したと判断
+    const recent = outputBuffer.slice(-500);
+    if (
+      (outputBuffer.includes('/workspace') || outputBuffer.includes('What can I help')) &&
+      !recent.includes('Choose the text style') &&
+      !recent.includes('subscription')
+    ) {
       promptSent = true;
+      if (enterInterval) clearInterval(enterInterval);
       setTimeout(() => writeIfOpen(input.prompt + '\r'), 300);
       return;
     }
-
-    // オンボーディング画面検出 → Enter で次へ
-    if (enterCount < MAX_AUTO_ENTERS) {
-      const onboardingPatterns = [
-        'Choose the text style',
-        'can be used with your Claude subscription',
-        'billed based on API',
-        'Let\'s get started',
-        'press Enter',
-      ];
-      for (const p of onboardingPatterns) {
-        if (outputBuffer.includes(p) && enterCount < MAX_AUTO_ENTERS) {
-          enterCount++;
-          setTimeout(() => writeIfOpen('\r'), 300 * enterCount);
-        }
-      }
-    }
-  };
+    // まだオンボーディング中 → Enter で次へ
+    writeIfOpen('\r');
+  }, 600);
 
   duplex.on('data', (chunk: Buffer) => {
-    handleAutoInput(chunk);
+    outputBuffer += chunk.toString('utf8');
   });
 
-  // フォールバック: 8 秒後にまだプロンプト未送信なら強制送信
+  // フォールバック: 10 秒後にまだプロンプト未送信なら強制送信
   setTimeout(() => {
     if (!promptSent) {
       promptSent = true;
+      if (enterInterval) clearInterval(enterInterval);
       writeIfOpen(input.prompt + '\r');
     }
-  }, 8000);
+  }, 10000);
 
   // Tty モードでは Docker は stdout/stderr を multiplex しない (単一ストリーム)。
   // 全出力をそのまま terminal.data イベントとして転送する。
