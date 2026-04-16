@@ -45,9 +45,12 @@ export default function TaskView() {
   const [retrying, setRetrying] = useState(false);
   const [silentTimeout, setSilentTimeout] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
-  // Tracks whether the chat log is scrolled to (near) the bottom. Used to
-  // decide whether new events should auto-scroll and whether to show the
-  // floating "jump to bottom" button.
+  // atBottom は 2 つの用途がある:
+  //   1. jump-to-bottom ボタンの表示制御 (state → re-render 必要)
+  //   2. auto-scroll effect の判定 (ref → re-render を回避)
+  // state だけだと scrollTo → onScroll → setAtBottom → effect → scrollTo の
+  // 無限ループが発生するため、effect 側は ref を参照する。
+  const atBottomRef = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
   const sessionId = task?.sessionId ?? null;
   const timeline = useMemo(() => buildTimeline(events), [events]);
@@ -187,15 +190,17 @@ export default function TaskView() {
   // respect their current scroll position so they can read history while
   // new events pour in.
   useEffect(() => {
-    if (!atBottom) return;
+    if (!atBottomRef.current) return;
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [timeline.length, atBottom]);
+  }, [timeline.length]);
 
   const onTimelineScroll = () => {
     const el = listRef.current;
     if (!el) return;
     const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
-    setAtBottom(gap < 40);
+    const v = gap < 40;
+    atBottomRef.current = v;
+    setAtBottom(v);
   };
 
   const scrollToBottom = () => {
