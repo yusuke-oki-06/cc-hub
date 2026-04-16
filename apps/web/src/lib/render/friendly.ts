@@ -3,8 +3,11 @@ import type { SseEvent } from '@cc-hub/shared';
 export type FriendlyKind =
   | 'user'
   | 'assistant'
+  | 'thinking'       // Claude の拡張思考 (折りたたみ表示)
   | 'tool.running'
   | 'tool.finished'
+  | 'task_list'      // TodoWrite: チェックリスト表示
+  | 'plan_approval'  // ExitPlanMode: 承認/却下 UI
   | 'permission'
   | 'user_question'  // AskUserQuestion: 質問 + 選択肢を対話的に描画
   | 'result.success'
@@ -48,14 +51,48 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
       // arrive as a bare string or missing. Guard against non-array values
       // so `.filter` below never blows up the whole timeline.
       const content = Array.isArray(msg?.content) ? msg.content : [];
+
+      // Thinking ブロック — extended thinking 有効時に content[] に
+      // {type:"thinking", thinking:"..."} が混ざる。テキストとは別に返す。
+      const thinkingBlocks = content.filter(
+        (c) => c.type === 'thinking' && typeof (c as { thinking?: string }).thinking === 'string',
+      );
+
       const text = content
         .filter((c) => c.type === 'text' && typeof c.text === 'string')
         .map((c) => c.text!)
         .join('\n')
         .trim();
       const tools = content.filter((c) => c.type === 'tool_use');
+
+      // Thinking があればまず thinking item を返す (buildTimeline で後処理)
+      if (thinkingBlocks.length > 0 && !text && tools.length === 0) {
+        const thinkingText = thinkingBlocks
+          .map((c) => (c as { thinking?: string }).thinking ?? '')
+          .join('\n');
+        return {
+          seq: ev.seq,
+          kind: 'thinking',
+          title: 'Claude の思考プロセス',
+          body: thinkingText,
+          meta: time,
+        };
+      }
+
       if (text) {
-        return { seq: ev.seq, kind: 'assistant', title: 'Claude', body: text, meta: time };
+        // Thinking + text が同じメッセージにある場合: text を優先して表示。
+        // thinking は直前の item として既に出ているか、ここで結合する。
+        const thinkingText = thinkingBlocks.length > 0
+          ? thinkingBlocks.map((c) => (c as { thinking?: string }).thinking ?? '').join('\n')
+          : undefined;
+        return {
+          seq: ev.seq,
+          kind: 'assistant',
+          title: 'Claude',
+          body: text,
+          meta: time,
+          data: thinkingText ? { thinking: thinkingText } : undefined,
+        };
       }
       if (tools.length > 0) {
         const first = tools[0] as { name?: string; input?: Record<string, unknown>; id?: string } | undefined;
@@ -65,6 +102,28 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
             seq: ev.seq,
             kind: 'user_question',
             title: 'Claude からの質問',
+            data: first.input,
+            toolUseId: first.id,
+            meta: time,
+          };
+        }
+        // TodoWrite → チェックリスト表示
+        if (first?.name === 'TodoWrite' || first?.name === 'TaskCreate') {
+          return {
+            seq: ev.seq,
+            kind: 'task_list',
+            title: 'タスクリスト',
+            data: first.input,
+            toolUseId: first.id,
+            meta: time,
+          };
+        }
+        // ExitPlanMode → 承認/却下 UI
+        if (first?.name === 'ExitPlanMode') {
+          return {
+            seq: ev.seq,
+            kind: 'plan_approval',
+            title: 'プランの承認',
             data: first.input,
             toolUseId: first.id,
             meta: time,
@@ -87,6 +146,26 @@ export function toFriendly(ev: SseEvent): FriendlyItem {
           seq: ev.seq,
           kind: 'user_question',
           title: 'Claude からの質問',
+          data: payload.input,
+          toolUseId: (payload.id as string) ?? undefined,
+          meta: time,
+        };
+      }
+      if (payload.name === 'TodoWrite' || payload.name === 'TaskCreate') {
+        return {
+          seq: ev.seq,
+          kind: 'task_list',
+          title: 'タスクリスト',
+          data: payload.input,
+          toolUseId: (payload.id as string) ?? undefined,
+          meta: time,
+        };
+      }
+      if (payload.name === 'ExitPlanMode') {
+        return {
+          seq: ev.seq,
+          kind: 'plan_approval',
+          title: 'プランの承認',
           data: payload.input,
           toolUseId: (payload.id as string) ?? undefined,
           meta: time,

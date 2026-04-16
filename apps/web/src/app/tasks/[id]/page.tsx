@@ -414,9 +414,18 @@ export default function TaskView() {
                 <ChatMessage
                   key={it.seq}
                   item={it}
-                  renderInline={(i) => (
-                    <PermissionInlineCard item={i} sessionId={sessionId} />
-                  )}
+                  renderInline={(i) => {
+                    if (i.kind === 'plan_approval') {
+                      return (
+                        <PlanApprovalCard
+                          item={i}
+                          onApprove={() => void sendPrompt({ text: 'approve' })}
+                          onReject={() => void sendPrompt({ text: 'reject' })}
+                        />
+                      );
+                    }
+                    return <PermissionInlineCard item={i} sessionId={sessionId} />;
+                  }}
                 />
               ))}
               {isRunning && showThinking(timeline) && (
@@ -551,6 +560,81 @@ function ShortcutButton({
 /** claude.ai 風のボトムシート。Composer を置き換えて表示される。
  *  複数質問対応: 「N 件中 M 件目」ナビ + 1 問回答ごとに次へ遷移。
  *  全問回答後に onComplete(answers[]) が発火。 */
+/** ExitPlanMode — 承認 / 却下 カード */
+function PlanApprovalCard({
+  item,
+  onApprove,
+  onReject,
+}: {
+  item: FriendlyItem;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const [feedback, setFeedback] = useState('');
+  const [showFeedback, setShowFeedback] = useState(false);
+  return (
+    <div className="rounded-card border border-[#e3d196] bg-[#faf8ee] p-4 shadow-whisper">
+      <div className="mb-3 font-sans text-[13px] font-medium text-[#7a5a12]">
+        {item.title}
+      </div>
+      <p className="mb-3 font-sans text-[12px] text-olive">
+        Claude がプランを提示しました。承認するとプランに基づいて実装が始まります。
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onApprove}
+          className="rounded-card bg-[#7a9a3a] px-4 py-1.5 font-sans text-[13px] text-white hover:bg-[#6b8a2e]"
+        >
+          承認
+        </button>
+        <button
+          type="button"
+          onClick={onReject}
+          className="rounded-card border border-[#e0a9a9] bg-white px-4 py-1.5 font-sans text-[13px] text-[#b53333] hover:bg-[#fbeaea]"
+        >
+          却下
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowFeedback((v) => !v)}
+          className="rounded-card border border-border-cream bg-white px-4 py-1.5 font-sans text-[13px] text-charcoal hover:bg-sand"
+        >
+          フィードバック
+        </button>
+      </div>
+      {showFeedback && (
+        <div className="mt-3 flex gap-2">
+          <input
+            type="text"
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="修正してほしい点を記入"
+            className="flex-1 rounded-card border border-border-warm bg-white px-3 py-1.5 font-sans text-[13px] focus:outline-none"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && feedback.trim()) {
+                onReject();
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (feedback.trim()) {
+                // フィードバック付きで却下
+                onReject();
+              }
+            }}
+            className="shrink-0 rounded-card bg-terracotta px-3 py-1.5 font-sans text-[12px] text-ivory hover:bg-[#b5573a]"
+          >
+            送信
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function QuestionModal({
   questions,
   onComplete,

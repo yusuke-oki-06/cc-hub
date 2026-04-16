@@ -43,6 +43,21 @@ export function ChatMessage({ item, renderInline }: Props) {
     return <div className="my-1">{renderInline(item)}</div>;
   }
 
+  // Thinking (拡張思考) — 折りたたみ表示
+  if (item.kind === 'thinking') {
+    return <ThinkingBlock item={item} />;
+  }
+
+  // タスクリスト (TodoWrite)
+  if (item.kind === 'task_list') {
+    return <TaskListCard item={item} />;
+  }
+
+  // プラン承認 (ExitPlanMode)
+  if (item.kind === 'plan_approval' && renderInline) {
+    return <>{renderInline(item)}</>;
+  }
+
   if (item.kind === 'user') {
     return (
       <div className="flex justify-end">
@@ -154,7 +169,9 @@ export function ChatMessage({ item, renderInline }: Props) {
 
 function AssistantBubble({ item }: { item: FriendlyItem }) {
   const [copied, setCopied] = useState(false);
+  const [showThinking, setShowThinking] = useState(false);
   const text = item.body ?? item.title ?? '';
+  const thinkingText = (item.data as { thinking?: string } | undefined)?.thinking;
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -166,6 +183,23 @@ function AssistantBubble({ item }: { item: FriendlyItem }) {
   };
   return (
     <div className="group relative pl-1 pr-8">
+      {thinkingText && (
+        <div className="mb-2 rounded-card border border-border-cream bg-parchment/50">
+          <button
+            type="button"
+            onClick={() => setShowThinking((v) => !v)}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-sans text-[11.5px] text-stone hover:bg-sand/60"
+          >
+            <span>{showThinking ? '▾' : '▸'}</span>
+            <span>Claude の思考プロセス</span>
+          </button>
+          {showThinking && (
+            <pre className="border-t border-border-cream bg-parchment/30 px-4 py-2 font-mono text-[11px] leading-[1.5] text-olive whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+              {thinkingText}
+            </pre>
+          )}
+        </div>
+      )}
       <div className="mb-1 font-sans text-[11px] uppercase tracking-[0.5px] text-stone">
         Claude
       </div>
@@ -257,6 +291,72 @@ function Dot({ pulsing = false }: { pulsing?: boolean }) {
   );
 }
 
+/** Extended thinking — 折りたたみ式の思考プロセス表示。CLI と同等。 */
+function ThinkingBlock({ item }: { item: FriendlyItem }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-card border border-border-cream bg-parchment/50">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left font-sans text-[12.5px] text-stone transition hover:bg-sand/60"
+      >
+        <span className="text-[11px]">{open ? '▾' : '▸'}</span>
+        <span className="font-medium">{item.title}</span>
+        {item.meta && <span className="ml-auto font-mono text-[11px]">{item.meta}</span>}
+      </button>
+      {open && item.body && (
+        <pre className="border-t border-border-cream bg-parchment/30 px-4 py-3 font-mono text-[11.5px] leading-[1.6] text-olive whitespace-pre-wrap max-h-[400px] overflow-y-auto">
+          {item.body}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+/** TodoWrite / TaskCreate → チェックリスト表示 */
+function TaskListCard({ item }: { item: FriendlyItem }) {
+  const input = item.data as {
+    todos?: Array<{ id?: string; content?: string; status?: string }>;
+  } | undefined;
+  const todos = input?.todos ?? [];
+  if (todos.length === 0) {
+    return (
+      <div className="flex items-center gap-2 px-2 py-1 font-sans text-[12.5px] text-stone">
+        <Dot />
+        <span>{item.title}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-card border border-border-cream bg-white">
+      <div className="border-b border-border-cream px-3 py-2 font-sans text-[12px] font-medium text-stone">
+        {item.title}
+        {item.meta && <span className="ml-2 font-mono text-[11px]">{item.meta}</span>}
+      </div>
+      <ul className="divide-y divide-border-cream">
+        {todos.map((t, i) => {
+          const status = t.status ?? 'pending';
+          const icon =
+            status === 'completed' ? '✓' : status === 'in_progress' ? '●' : '○';
+          const color =
+            status === 'completed'
+              ? 'text-[#6b8a3e]'
+              : status === 'in_progress'
+                ? 'text-terracotta'
+                : 'text-stone';
+          return (
+            <li key={t.id ?? i} className="flex items-start gap-2.5 px-3 py-2">
+              <span className={`mt-0.5 shrink-0 font-mono text-[13px] ${color}`}>{icon}</span>
+              <span className="font-sans text-[13px] text-near">{t.content ?? ''}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function CopyGlyph() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -336,11 +436,20 @@ export function ChatThinking({ onStop }: { onStop?: () => void | Promise<void> }
   return (
     <div className="flex items-center justify-between gap-2 pl-1 py-2 font-sans text-[13px] text-olive">
       <div className="flex items-center gap-2">
-        <span className="inline-flex gap-[3px]">
-          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.3s]" />
-          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta [animation-delay:-0.15s]" />
-          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-terracotta" />
-        </span>
+        {/* CLI のスパークル風アニメーション */}
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          className="animate-spin text-terracotta"
+          style={{ animationDuration: '2s' }}
+          aria-hidden="true"
+        >
+          <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill="currentColor" />
+          <path d="M18 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" fill="currentColor" opacity="0.5" />
+          <path d="M4 16l.7 2.3L7 19l-2.3.7L4 22l-.7-2.3L1 19l2.3-.7L4 16z" fill="currentColor" opacity="0.3" />
+        </svg>
         <span className="text-stone">Claude が考えています…</span>
       </div>
       {onStop && (
