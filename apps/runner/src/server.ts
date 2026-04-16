@@ -338,12 +338,17 @@ async function runTurn(
     `[runTurn] session=${session.sessionId.slice(0, 8)} task=${session.taskId.slice(0, 8)} profile=${profile.id} model=${ov.model ?? '(default)'} mode=${ov.permissionMode ?? 'default'} firstTurn=${opts.isFirstTurn} resume=${session.claudeSessionId ?? 'none'} allowedTools=${allowedTools.length} prompt="${opts.prompt.slice(0, 80)}"`,
   );
   // MCP サーバ設定 — Slack 等 Remote MCP を使えるようにする。
+  // oauth セクションを含めないと CLI が認証できない。
   // 将来は profile.mcpServers から動的に読む。
   const mcpConfig = {
     mcpServers: {
       slack: {
         type: 'http',
         url: 'https://mcp.slack.com/mcp',
+        oauth: {
+          clientId: '1601185624273.8899143856786',
+          callbackPort: 3118,
+        },
       },
     },
   };
