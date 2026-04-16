@@ -35,6 +35,7 @@ export function TerminalView({ events, className }: Props) {
       const fit = new FitAddon();
       const term = new Terminal({
         cursorBlink: false,
+        disableStdin: true,
         fontSize: 14,
         fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace',
         lineHeight: 1.4,

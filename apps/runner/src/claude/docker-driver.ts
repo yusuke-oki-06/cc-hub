@@ -100,6 +100,24 @@ export async function createSandbox(input: CreateSandboxInput): Promise<SandboxH
 
   await container.start();
 
+  // CLI の初回セットアップ (テーマ選択 / オンボーディング) をスキップするため
+  // settings.json を事前配置する。これが無いと対話モードで TUI セットアップ
+  // ウィザードが出てしまう。
+  try {
+    const setupExec = await container.exec({
+      Cmd: [
+        'sh',
+        '-c',
+        'mkdir -p /home/app/.claude && echo \'{"theme":"dark","hasCompletedOnboarding":true}\' > /home/app/.claude/settings.json',
+      ],
+      AttachStdout: false,
+      AttachStderr: false,
+    });
+    await setupExec.start({});
+  } catch (err) {
+    console.warn('[docker-driver] failed to inject claude settings', err);
+  }
+
   return {
     containerId: container.id,
     stop: async () => {
