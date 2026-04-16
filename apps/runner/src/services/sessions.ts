@@ -61,10 +61,16 @@ export interface CreateSessionInput {
 }
 
 export async function createSession(input: CreateSessionInput): Promise<ActiveSession> {
-  if (active.size >= config.MAX_PARALLEL_SESSIONS) {
-    throw new Error(
-      `max_parallel_sessions_reached (${config.MAX_PARALLEL_SESSIONS})`,
+  // リミットに達したら最も古いセッションを自動破棄して枠を空ける
+  while (active.size >= config.MAX_PARALLEL_SESSIONS) {
+    const oldest = [...active.values()].sort(
+      (a, b) => a.lastActivityAt - b.lastActivityAt,
+    )[0];
+    if (!oldest) break;
+    console.log(
+      `[sessions] evicting oldest session ${oldest.sessionId} to make room`,
     );
+    await destroySession(oldest.sessionId).catch(() => undefined);
   }
   const sessionId = randomUUID();
 

@@ -635,6 +635,7 @@ app.post('/api/sessions/:id/abort', async (c) => {
   if (session.userId !== c.get('userId')) return c.json({ error: 'forbidden' }, 403);
   await session.claudeExec?.abort('user_abort');
   await setTaskStatus(session.taskId, 'aborted');
+  await destroySession(sessionId);
   return c.json({ ok: true });
 });
 

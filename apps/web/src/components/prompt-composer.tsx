@@ -26,6 +26,8 @@ export interface PromptComposerProps {
   extraActions?: React.ReactNode;
   /** 値をリセットしたい時 (送信完了時など) に親側が数値を bump する。 */
   resetKey?: number;
+  /** タスク名: textarea 内の右上に薄く表示。CLI の入力欄右上風。 */
+  taskName?: string;
 }
 
 // 注: per-turn tool allowlist override (以前 profile prop 経由) は撤廃した。
@@ -38,6 +40,7 @@ export function PromptComposer({
   onSubmit,
   extraActions,
   resetKey,
+  taskName,
 }: PromptComposerProps) {
   const [text, setText] = useState('');
   const [model, setModel] = useState<ClaudeModelId>('sonnet');
@@ -104,7 +107,12 @@ export function PromptComposer({
         </div>
       )}
 
-      <div className="overflow-visible rounded-[24px] border border-border-warm bg-ivory shadow-whisper theme-airbnb-composer">
+      <div className="relative overflow-visible rounded-[24px] border border-border-warm bg-ivory shadow-whisper theme-airbnb-composer">
+        {taskName && (
+          <div className="pointer-events-none absolute right-5 top-3 z-10 max-w-[200px] truncate font-mono text-[11px] text-stone/60">
+            {taskName}
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           rows={variant === 'new' ? 5 : 3}

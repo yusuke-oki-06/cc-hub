@@ -21,15 +21,19 @@ export async function createTask(input: {
   projectId?: string;
 }): Promise<TaskRow> {
   const projectId = input.projectId ?? '00000000-0000-0000-0000-000000000100';
+  // Auto-label: プロンプトの先頭行を最大50文字で切り出し
+  const autoLabel = input.prompt.replace(/\n.*/s, '').trim().slice(0, 50);
   const [row] = await sql<TaskRow[]>`
-    INSERT INTO tasks (user_id, profile_id, prompt, repo_path, status, project_id)
+    INSERT INTO tasks (user_id, profile_id, prompt, label, repo_path, status, project_id)
     VALUES (${input.userId}::uuid, ${input.profileId}, ${input.prompt},
+            ${autoLabel || null},
             ${input.repoPath ?? '/workspace'}, 'queued', ${projectId}::uuid)
     RETURNING
       id::text,
       user_id::text   AS "userId",
       profile_id      AS "profileId",
       prompt,
+      label,
       status,
       cost_usd::float AS "costUsd",
       created_at::text AS "createdAt",

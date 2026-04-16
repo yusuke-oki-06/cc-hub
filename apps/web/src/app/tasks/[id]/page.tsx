@@ -496,6 +496,7 @@ export default function TaskView() {
               variant="followup"
               disabled={!sessionId || isRunning}
               onSubmit={sendPrompt}
+              taskName={task?.prompt ? (task.prompt.replace(/\n.*/s, '').slice(0, 40) || undefined) : undefined}
               extraActions={
                 <>
                   <ShortcutButton
