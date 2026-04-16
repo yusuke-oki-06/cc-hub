@@ -326,7 +326,14 @@ export function buildTimeline(events: SseEvent[]): FriendlyItem[] {
     }
   }
 
-  return filtered;
+  // user_question はインライン描画せずボトムモーダルで扱う方針に変更した。
+  // 回答済み・未回答にかかわらずタイムラインからは抜く (未回答は page 側で
+  // 別途 activeQuestion として拾ってモーダル描画)。
+  for (const it of filtered) {
+    if (it.kind === 'user_question') it.kind = 'hidden';
+  }
+
+  return filtered.filter((i) => i.kind !== 'hidden');
 }
 
 function summarizeToolCall(name: string, input: Record<string, unknown>): string {

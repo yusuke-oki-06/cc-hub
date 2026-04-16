@@ -22,6 +22,21 @@ interface Task {
   sessionId: string | null;
 }
 
+interface QuestionSpec {
+  question: string;
+  header?: string;
+  options: Array<{ label: string; description?: string }>;
+  multiSelect?: boolean;
+}
+
+interface ActiveQuestion {
+  toolUseId: string;
+  seq: number;
+  question: string;
+  options: Array<{ label: string; description?: string }>;
+  multiSelect: boolean;
+}
+
 export default function TaskView() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -38,6 +53,51 @@ export default function TaskView() {
   const [atBottom, setAtBottom] = useState(true);
   const sessionId = task?.sessionId ?? null;
   const timeline = useMemo(() => buildTimeline(events), [events]);
+
+  // AskUserQuestion モーダル — 未回答のものがあればボトムシート風に描画する。
+  // 「回答済み」判定は「最後の turn.started (= user メッセージ) の seq が
+  // 質問の seq より大きい」ことで行う。
+  const activeQuestion = useMemo<ActiveQuestion | null>(() => {
+    let latest: ActiveQuestion | null = null;
+    let latestUserSeq = -1;
+    for (const ev of events) {
+      if (ev.type === 'turn.started') {
+        if (ev.seq > latestUserSeq) latestUserSeq = ev.seq;
+        continue;
+      }
+      if (ev.type !== 'assistant.message') continue;
+      const payload = ev.payload as {
+        type?: string;
+        message?: {
+          content?: Array<{
+            type?: string;
+            name?: string;
+            id?: string;
+            input?: { questions?: Array<QuestionSpec> };
+          }>;
+        };
+      } | null;
+      if (payload?.type !== 'assistant') continue;
+      const content = payload.message?.content ?? [];
+      for (const c of content) {
+        if (c?.type === 'tool_use' && c?.name === 'AskUserQuestion') {
+          const q = c.input?.questions?.[0];
+          if (!q) continue;
+          latest = {
+            toolUseId: c.id ?? '',
+            seq: ev.seq,
+            question: q.question,
+            options: q.options ?? [],
+            multiSelect: !!q.multiSelect,
+          };
+        }
+      }
+    }
+    if (!latest) return null;
+    if (latest.seq <= latestUserSeq) return null;
+    return latest;
+  }, [events]);
+
   const saasLinks = useMemo(
     () => events.filter((e) => e.type === 'saas_link'),
     [events],
@@ -350,21 +410,9 @@ export default function TaskView() {
                 <ChatMessage
                   key={it.seq}
                   item={it}
-                  renderInline={(i) => {
-                    if (i.kind === 'user_question') {
-                      return (
-                        <UserQuestionCard
-                          item={i}
-                          onChoose={(answer) => {
-                            // 選択肢を押したら composer に流し込まれたかのように
-                            // そのまま 1 ターン分の user message として送信する。
-                            void sendPrompt({ text: answer });
-                          }}
-                        />
-                      );
-                    }
-                    return <PermissionInlineCard item={i} sessionId={sessionId} />;
-                  }}
+                  renderInline={(i) => (
+                    <PermissionInlineCard item={i} sessionId={sessionId} />
+                  )}
                 />
               ))}
               {isRunning && showThinking(timeline) && (
@@ -396,6 +444,23 @@ export default function TaskView() {
               </div>
             )}
           </div>
+
+          {/* Active AskUserQuestion — ボトムシート風にモーダル表示。選択する
+              と Q/A 形式で user メッセージを送信し、次ターンで Claude が続き
+              を判断する。 */}
+          {activeQuestion && (
+            <QuestionModal
+              question={activeQuestion}
+              onSelect={(answer) => {
+                const text = `Q: ${activeQuestion.question}\nA: ${answer}`;
+                void sendPrompt({ text });
+              }}
+              onSkip={() => {
+                const text = `Q: ${activeQuestion.question}\nA: (スキップ)`;
+                void sendPrompt({ text });
+              }}
+            />
+          )}
 
           {/* Composer (bottom-fixed within section via grid-rows auto) */}
           <PromptComposer
@@ -479,58 +544,129 @@ function ShortcutButton({
 }
 
 
-/** Claude が AskUserQuestion で質問を投げた時に、タイムライン内に
- *  選択肢をクリック可能なカードとして描画する。クリックで選んだ答えを
- *  次の user message として sendPrompt に流し込む。 */
-function UserQuestionCard({
-  item,
-  onChoose,
+/** claude.ai 風のボトムシート。Composer 直上に浮かべて、
+ *  ↑↓ で移動・Enter で選択・Esc でスキップのキーバインドを提供する。
+ *  右下に自由入力欄 + スキップボタン。 */
+function QuestionModal({
+  question,
+  onSelect,
+  onSkip,
 }: {
-  item: FriendlyItem;
-  onChoose: (answer: string) => void;
+  question: ActiveQuestion;
+  onSelect: (answer: string) => void;
+  onSkip: () => void;
 }) {
-  const input = item.data as
-    | {
-        questions?: Array<{
-          question: string;
-          header?: string;
-          options: Array<{ label: string; description?: string }>;
-          multiSelect?: boolean;
-        }>;
+  const [highlight, setHighlight] = useState(0);
+  const [freetext, setFreetext] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Text 入力欄にフォーカスがあるときは Enter/Escape だけ自力で処理させる
+      if (document.activeElement === inputRef.current) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onSkip();
+        }
+        return;
       }
-    | undefined;
-  const questions = input?.questions ?? [];
-  if (questions.length === 0) return null;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlight((v) => Math.min(question.options.length - 1, v + 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlight((v) => Math.max(0, v - 1));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const o = question.options[highlight];
+        if (o) onSelect(o.label);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onSkip();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [highlight, question.options, onSelect, onSkip]);
+
   return (
-    <div className="space-y-3 rounded-card border border-border-warm bg-ivory p-4 shadow-whisper">
-      <div className="flex items-center gap-2 font-sans text-[11px] uppercase tracking-[0.6px] text-stone">
-        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-terracotta/15 text-[10px] text-terracotta">
-          ?
-        </span>
-        <span>Claude からの質問</span>
-      </div>
-      {questions.map((q, qi) => (
-        <div key={qi} className="space-y-2">
-          <div className="font-sans text-[14px] leading-[1.5] text-near">{q.question}</div>
-          <div className="flex flex-wrap gap-1.5">
-            {q.options.map((o, oi) => (
+    <div className="pointer-events-none absolute inset-x-0 bottom-[148px] z-20 flex justify-center px-3">
+      <div className="pointer-events-auto w-full max-w-[640px] overflow-hidden rounded-[20px] border border-border-warm bg-ivory shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+        <header className="flex items-center justify-between gap-3 border-b border-border-cream px-4 py-3">
+          <span className="truncate font-sans text-[14px] text-near">{question.question}</span>
+          <button
+            type="button"
+            onClick={onSkip}
+            aria-label="閉じる / スキップ"
+            className="shrink-0 rounded p-1 text-stone hover:bg-sand hover:text-charcoal"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <path d="M2 2l10 10M12 2l-10 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </header>
+        <ul className="divide-y divide-border-cream">
+          {question.options.map((o, i) => (
+            <li key={i}>
               <button
-                key={oi}
                 type="button"
-                onClick={() => onChoose(o.label)}
+                onClick={() => onSelect(o.label)}
+                onMouseEnter={() => setHighlight(i)}
                 title={o.description}
-                className="group inline-flex items-start gap-1.5 rounded-full border border-border-cream bg-white px-3 py-1.5 text-left font-sans text-[13px] text-charcoal transition hover:border-terracotta hover:bg-[#fbece4]"
+                className={
+                  'flex w-full items-center gap-3 px-4 py-2.5 text-left transition ' +
+                  (i === highlight ? 'bg-sand text-near' : 'text-charcoal hover:bg-sand/60')
+                }
               >
-                <span className="shrink-0 text-stone group-hover:text-terracotta">→</span>
-                <span>{o.label}</span>
+                <span
+                  className={
+                    'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[11px] ' +
+                    (i === highlight ? 'bg-terracotta text-ivory' : 'bg-border-cream text-stone')
+                  }
+                >
+                  {i + 1}
+                </span>
+                <span className="flex-1 font-sans text-[13.5px]">{o.label}</span>
+                {i === highlight && (
+                  <span className="shrink-0 font-mono text-[11px] text-stone">↵</span>
+                )}
               </button>
-            ))}
+            </li>
+          ))}
+        </ul>
+        <div className="border-t border-border-cream px-4 py-3">
+          <div className="flex items-center gap-2 rounded-card border border-border-cream bg-white px-3 py-1.5 focus-within:border-terracotta">
+            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" className="shrink-0 text-stone">
+              <path d="M2 13l3-3 8-8 3 3-8 8-3 3-3 0z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round" />
+            </svg>
+            <input
+              ref={inputRef}
+              type="text"
+              value={freetext}
+              onChange={(e) => setFreetext(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && freetext.trim()) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onSelect(freetext.trim());
+                }
+              }}
+              placeholder="その他 (自由入力)"
+              className="flex-1 bg-transparent font-sans text-[13px] text-near placeholder:text-stone focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={onSkip}
+              className="shrink-0 rounded-card border border-border-cream bg-white px-2 py-0.5 font-sans text-[11px] text-charcoal hover:bg-sand"
+            >
+              スキップ
+            </button>
           </div>
         </div>
-      ))}
-      <p className="font-sans text-[11px] text-stone">
-        選択肢をクリックすると、その選択がそのまま返答として送信されます。自由入力で答える場合は下の入力欄に書いてください。
-      </p>
+        <p className="bg-parchment/60 px-4 py-2 text-center font-sans text-[11px] text-stone">
+          ↑↓ で移動 · Enter で選択 · Esc でスキップ
+        </p>
+      </div>
     </div>
   );
 }
