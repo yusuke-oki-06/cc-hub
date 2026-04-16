@@ -189,23 +189,40 @@ export default function TaskView() {
   // Only auto-scroll when the user was already at the bottom; otherwise
   // respect their current scroll position so they can read history while
   // new events pour in.
+  // 新メッセージ到着時は常に最下部にスクロール。
+  // ユーザーが手動で上にスクロールした場合のみ自動スクロールを止め、
+  // jump-to-bottom ボタンを表示する。
+  const userScrolledUp = useRef(false);
+  const prevTimelineLen = useRef(0);
+
   useEffect(() => {
-    if (!atBottomRef.current) return;
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+    const el = listRef.current;
+    if (!el) return;
+    // タイムラインが伸びた = 新メッセージ到着
+    if (timeline.length > prevTimelineLen.current) {
+      if (!userScrolledUp.current) {
+        el.scrollTo({ top: el.scrollHeight });
+      }
+    }
+    prevTimelineLen.current = timeline.length;
   }, [timeline.length]);
 
   const onTimelineScroll = () => {
     const el = listRef.current;
     if (!el) return;
     const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
-    const v = gap < 40;
-    atBottomRef.current = v;
-    setAtBottom(v);
+    // ユーザーが上にスクロールした (40px 以上のギャップ) → 自動スクロール停止
+    // 最下部に戻った → 自動スクロール再開
+    const isAtBottom = gap < 40;
+    userScrolledUp.current = !isAtBottom;
+    atBottomRef.current = isAtBottom;
+    setAtBottom(isAtBottom);
   };
 
   const scrollToBottom = () => {
     const el = listRef.current;
     if (!el) return;
+    userScrolledUp.current = false;
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   };
 

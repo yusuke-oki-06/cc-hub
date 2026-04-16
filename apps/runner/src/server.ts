@@ -317,9 +317,12 @@ async function runTurn(
 
   // allowedTools: override only narrows within profile's allow set (cannot
   // escalate beyond profile). Intersection preserves guardrail contract.
-  const allowedTools = ov.allowedTools
+  const baseTools = ov.allowedTools
     ? ov.allowedTools.filter((t) => profile.allowedTools.includes(t))
     : profile.allowedTools;
+  // MCP ツール (mcp__*) は --mcp-config / credentials.json で管理者が制御済み
+  // なので CLI の permission prompt をスキップさせる。
+  const allowedTools = [...baseTools, 'mcp__*'];
 
   await publishEvent({
     sessionId: session.sessionId,
