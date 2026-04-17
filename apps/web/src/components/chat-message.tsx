@@ -457,7 +457,7 @@ export function ChatThinking({ onStop }: { onStop?: () => void | Promise<void> }
           type="button"
           onClick={() => void onStop()}
           title="応答を停止"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border-warm bg-white px-3 py-1 font-sans text-[12px] text-charcoal transition hover:bg-sand"
+          className="inline-flex items-center gap-1.5 rounded-full bg-transparent px-3 py-1 font-sans text-[12px] text-error-crimson transition hover:bg-[var(--danger-bg)]"
         >
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
             <rect x="1.5" y="1.5" width="7" height="7" rx="1" fill="currentColor" />
