@@ -7,7 +7,7 @@ import { SiSlack, SiJira } from 'react-icons/si';
 import { TokenSetup } from '@/components/token-setup';
 import { SkillPicker, type SkillItem } from '@/components/skill-picker';
 import { MoveToProjectModal } from '@/components/move-to-project-modal';
-import { ConnectorPicker } from '@/components/connector-picker';
+import { ConnectorMenuSection, useConnectors } from '@/components/connector-picker';
 import {
   CLAUDE_MODELS,
   GUI_PERMISSION_MODES,
@@ -312,6 +312,16 @@ export default function Home() {
               onPickFile={() => fileInputRef.current?.click()}
               onPickSkill={() => setSkillModal(true)}
               onPickProject={() => setProjectModal(true)}
+              enabledMcpSlugs={enabledMcpSlugs}
+              onToggleMcp={(slug, on) => {
+                setEnabledMcpSlugs((prev) => {
+                  const next = new Set(prev ?? []);
+                  if (on) next.add(slug);
+                  else next.delete(slug);
+                  return next;
+                });
+              }}
+              onInitializeMcp={(allSlugs) => setEnabledMcpSlugs(new Set(allSlugs))}
             />
             {projectId !== UNTAGGED_PROJECT_ID && (
               <div className="group relative inline-flex h-7 items-stretch overflow-hidden rounded-md border border-[#2f6fbf]">
@@ -353,18 +363,6 @@ export default function Home() {
             {files.length > 0 && (
               <span className="font-sans text-[12px] text-olive">添付 {files.length} 件</span>
             )}
-            <ConnectorPicker
-              enabledSlugs={enabledMcpSlugs}
-              onToggle={(slug, on) => {
-                setEnabledMcpSlugs((prev) => {
-                  const next = new Set(prev ?? []);
-                  if (on) next.add(slug);
-                  else next.delete(slug);
-                  return next;
-                });
-              }}
-              onInitialize={(allSlugs) => setEnabledMcpSlugs(new Set(allSlugs))}
-            />
           </div>
           <div className="flex items-center gap-2">
             <ModeSelector value={permissionMode} onChange={setPermissionMode} />
@@ -533,13 +531,23 @@ function PlusMenu({
   onPickFile,
   onPickSkill,
   onPickProject,
+  enabledMcpSlugs,
+  onToggleMcp,
+  onInitializeMcp,
 }: {
   files: File[];
   onPickFile: () => void;
   onPickSkill: () => void;
   onPickProject: () => void;
+  enabledMcpSlugs: Set<string> | undefined;
+  onToggleMcp: (slug: string, enabled: boolean) => void;
+  onInitializeMcp: (allSlugs: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const { connectors, loaded } = useConnectors({
+    enabledSlugs: enabledMcpSlugs,
+    onInitialize: onInitializeMcp,
+  });
   useEffect(() => {
     if (!open) return;
     const onDocClick = () => setOpen(false);
@@ -569,8 +577,11 @@ function PlusMenu({
       {open && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
+          className="absolute left-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
         >
+          <div className="border-b border-border-cream px-3 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.5px] text-stone">
+            追加
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -605,6 +616,13 @@ function PlusMenu({
           >
             <span>プロジェクトを選ぶ</span>
           </button>
+          {loaded && connectors.length > 0 && (
+            <ConnectorMenuSection
+              connectors={connectors}
+              enabledSlugs={enabledMcpSlugs}
+              onToggle={onToggleMcp}
+            />
+          )}
         </div>
       )}
     </div>

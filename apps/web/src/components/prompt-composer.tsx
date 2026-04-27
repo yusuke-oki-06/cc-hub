@@ -7,7 +7,7 @@ import {
   type GuiPermissionMode,
 } from '@cc-hub/shared';
 import { SkillPicker } from '@/components/skill-picker';
-import { ConnectorPicker } from '@/components/connector-picker';
+import { ConnectorMenuSection, useConnectors } from '@/components/connector-picker';
 
 export interface ComposerSubmit {
   text: string;
@@ -169,10 +169,10 @@ export function PromptComposer({
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-cream bg-parchment/40 px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <PlusMenuSimple onPickSkill={() => setSkillModal(true)} />
-            <ConnectorPicker
-              enabledSlugs={enabledMcpSlugs}
-              onToggle={(slug, on) => {
+            <PlusMenuSimple
+              onPickSkill={() => setSkillModal(true)}
+              enabledMcpSlugs={enabledMcpSlugs}
+              onToggleMcp={(slug, on) => {
                 setEnabledMcpSlugs((prev) => {
                   const next = new Set(prev ?? []);
                   if (on) next.add(slug);
@@ -180,7 +180,7 @@ export function PromptComposer({
                   return next;
                 });
               }}
-              onInitialize={(allSlugs) => setEnabledMcpSlugs(new Set(allSlugs))}
+              onInitializeMcp={(allSlugs) => setEnabledMcpSlugs(new Set(allSlugs))}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -235,8 +235,22 @@ export function PromptComposer({
   );
 }
 
-function PlusMenuSimple({ onPickSkill }: { onPickSkill: () => void }) {
+function PlusMenuSimple({
+  onPickSkill,
+  enabledMcpSlugs,
+  onToggleMcp,
+  onInitializeMcp,
+}: {
+  onPickSkill: () => void;
+  enabledMcpSlugs: Set<string> | undefined;
+  onToggleMcp: (slug: string, enabled: boolean) => void;
+  onInitializeMcp: (allSlugs: string[]) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const { connectors, loaded } = useConnectors({
+    enabledSlugs: enabledMcpSlugs,
+    onInitialize: onInitializeMcp,
+  });
   useEffect(() => {
     if (!open) return;
     const onDoc = () => setOpen(false);
@@ -255,7 +269,7 @@ function PlusMenuSimple({ onPickSkill }: { onPickSkill: () => void }) {
           setOpen((v) => !v);
         }}
         className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border-warm bg-white text-stone hover:text-charcoal"
-        title="スキルを選ぶ"
+        title="追加 (スキル / MCP コネクタ)"
         aria-label="メニューを開く"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
@@ -265,8 +279,11 @@ function PlusMenuSimple({ onPickSkill }: { onPickSkill: () => void }) {
       {open && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
+          className="absolute left-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-card border border-border-warm bg-white shadow-whisper"
         >
+          <div className="border-b border-border-cream px-3 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.5px] text-stone">
+            追加
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -278,6 +295,13 @@ function PlusMenuSimple({ onPickSkill }: { onPickSkill: () => void }) {
             <span>スキルを選ぶ</span>
             <span className="font-mono text-[11px] text-stone">/</span>
           </button>
+          {loaded && connectors.length > 0 && (
+            <ConnectorMenuSection
+              connectors={connectors}
+              enabledSlugs={enabledMcpSlugs}
+              onToggle={onToggleMcp}
+            />
+          )}
         </div>
       )}
     </div>

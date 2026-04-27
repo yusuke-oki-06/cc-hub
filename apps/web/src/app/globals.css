@@ -23,6 +23,17 @@
   --heading-tracking: 0;
   --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.05);
   --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.08);
+
+  /* Semantic state tokens (warm-only; keep in sync with
+     design system's colors_and_type.css). */
+  --success-green: #7a9a3a;
+  --success-bg: #eaf1df;
+  --success-fg: #4b6a2a;
+  --warn-bg: #fbe89a;
+  --warn-fg: #6b4f00;
+  --warn-border: #e8c84a;
+  --danger-bg: #f3d7d7;
+  --error-crimson: #b53333;
 }
 
 [data-theme='airbnb'] {
