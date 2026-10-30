@@ -28,5 +28,10 @@
     "@types/node": "^20.17.6",
     "prettier": "^3.3.3",
     "tsx": "^4.19.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "protobufjs": "^7.5.5"
+    }
   }
 }
